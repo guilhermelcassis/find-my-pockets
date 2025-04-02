@@ -46,88 +46,23 @@ const AdminPage = () => {
         zipcode: '',
     });
 
-    // Fetch leaders
-    useEffect(() => {
-        const fetchLeaders = async () => {
-            try {
-                const { data: leadersData, error } = await db
-                  .from('leaders')
-                  .select('*');
-                
-                if (error) throw error;
-                
-                if (leadersData) {
-                    setLeaders(leadersData.map(leader => ({
-                        id: leader.id,
-                        name: leader.name,
-                        phone: leader.phone,
-                        email: leader.email || '',
-                        curso: leader.curso || ''
-                    })));
-                }
-            } catch (error) {
-                console.error("Erro ao buscar líderes:", error);
-            }
-        };
-        
-        fetchLeaders();
-        // Mostrar mapa após buscar os líderes
-        setShowMap(true);
-    }, []);
-
-    // Initialize Google Maps
-    useEffect(() => {
-        if (showMap) {
-            const loadGoogleMaps = () => {
-                // Check if Google Maps is already loaded to prevent multiple loads
-                if (!window.google && !window.googleMapsLoaded) {
-                    // Set flag to prevent duplicate loads
-                    window.googleMapsLoaded = true;
-                    
-                    const script = document.createElement('script');
-                    // Use the new Places API
-                    script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places&v=beta`;
-                    script.async = true;
-                    script.defer = true;
-                    document.head.appendChild(script);
-                    
-                    script.onload = initMap;
-                } else if (window.google) {
-                    initMap();
-                }
-            };
-            
-            loadGoogleMaps();
-            
-            // Cleanup function
-            return () => {
-                if (map) {
-                    setMap(null);
-                }
-                if (marker) {
-                    setMarker(null);
-                }
-            };
-        }
-    }, [showMap, map, marker]);
-
-    // Função para atualizar coordenadas a partir do marcador
-    const updateCoordinatesFromMarker = (position: google.maps.LatLng) => {
-        const lat = position.lat();
-        const lng = position.lng();
-        
-        setGroup((prev: Group) => ({
-            ...prev,
-            coordinates: {
-                latitude: lat,
-                longitude: lng
-            }
-        }));
-    };
-
     // Implementação do initMap usando useCallback
     const initMap = useCallback(() => {
         if (mapRef.current && window.google) {
+            // Define the updateCoordinatesFromMarker function inside the callback
+            const updateCoordinatesFromMarker = (position: google.maps.LatLng) => {
+                const lat = position.lat();
+                const lng = position.lng();
+                
+                setGroup((prev: Group) => ({
+                    ...prev,
+                    coordinates: {
+                        latitude: lat,
+                        longitude: lng
+                    }
+                }));
+            };
+            
             // Default to a central position (can be changed)
             const defaultLocation = { lat: -24.65236500245874, lng: -47.87912740708651 };
             
@@ -258,7 +193,73 @@ const AdminPage = () => {
                 });
             }
         }
-    }, [updateCoordinatesFromMarker]);
+    }, [setGroup, setMap, setMarker, setLocationSelected]);
+
+    // Update useEffect to include initMap in the dependency array
+    useEffect(() => {
+        if (showMap) {
+            const loadGoogleMaps = () => {
+                // Check if Google Maps is already loaded
+                if (!window.google && !window.googleMapsLoaded) {
+                    // Set flag to prevent duplicate loads
+                    window.googleMapsLoaded = true;
+                    
+                    const script = document.createElement('script');
+                    // Use the new Places API
+                    script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places&v=beta`;
+                    script.async = true;
+                    script.defer = true;
+                    document.head.appendChild(script);
+                    
+                    script.onload = initMap;
+                } else if (window.google) {
+                    initMap();
+                }
+            };
+            
+            loadGoogleMaps();
+            
+            // Cleanup function
+            return () => {
+                if (map) {
+                    // Google Maps doesn't have unbindAll method
+                    setMap(null);
+                }
+                if (marker) {
+                    marker.setMap(null);
+                }
+            };
+        }
+    }, [showMap, map, marker, initMap]);
+
+    // Fetch leaders
+    useEffect(() => {
+        const fetchLeaders = async () => {
+            try {
+                const { data: leadersData, error } = await db
+                  .from('leaders')
+                  .select('*');
+                
+                if (error) throw error;
+                
+                if (leadersData) {
+                    setLeaders(leadersData.map(leader => ({
+                        id: leader.id,
+                        name: leader.name,
+                        phone: leader.phone,
+                        email: leader.email || '',
+                        curso: leader.curso || ''
+                    })));
+                }
+            } catch (error) {
+                console.error("Erro ao buscar líderes:", error);
+            }
+        };
+        
+        fetchLeaders();
+        // Mostrar mapa após buscar os líderes
+        setShowMap(true);
+    }, []);
 
     // Validate Instagram username
     const validateInstagram = async (username: string) => {

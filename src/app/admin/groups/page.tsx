@@ -60,61 +60,25 @@ export default function GroupsPage() {
     }
   };
 
-  // Função para atualizar coordenadas a partir do marcador
-  const updateCoordinatesFromMarker = (position: google.maps.LatLng) => {
-    if (editingGroup) {
-      const lat = position.lat();
-      const lng = position.lng();
-      
-      setEditingGroup({
-        ...editingGroup,
-        coordinates: {
-          latitude: lat,
-          longitude: lng
-        }
-      });
-    }
-  };
-
-  // Initialize Google Maps
-  useEffect(() => {
-    if (showLocationEdit && editingGroup) {
-      const loadGoogleMaps = () => {
-        // Check if Google Maps is already loaded to prevent multiple loads
-        if (!window.google && !window.googleMapsLoaded) {
-          // Set flag to prevent duplicate loads
-          window.googleMapsLoaded = true;
-          
-          const script = document.createElement('script');
-          // Use the new Places API
-          script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places&v=beta`;
-          script.async = true;
-          script.defer = true;
-          document.head.appendChild(script);
-          
-          script.onload = initMap;
-        } else if (window.google) {
-          initMap();
-        }
-      };
-      
-      loadGoogleMaps();
-      
-      // Cleanup function
-      return () => {
-        if (map) {
-          setMap(null);
-        }
-        if (marker) {
-          setMarker(null);
-        }
-      };
-    }
-  }, [showLocationEdit, editingGroup, map, marker]);
-
-  // Define initMap usando useCallback
+  // Define initMap with useCallback before it's used in the useEffect
   const initMap = useCallback(() => {
     if (mapRef.current && window.google && editingGroup) {
+      // Function to update coordinates from marker position
+      const updateCoordinatesFromMarker = (position: google.maps.LatLng) => {
+        if (editingGroup) {
+          const lat = position.lat();
+          const lng = position.lng();
+          
+          setEditingGroup({
+            ...editingGroup,
+            coordinates: {
+              latitude: lat,
+              longitude: lng
+            }
+          });
+        }
+      };
+      
       // Use current coordinates from the editing group
       const currentLocation = { 
         lat: editingGroup.coordinates.latitude, 
@@ -248,7 +212,43 @@ export default function GroupsPage() {
         });
       }
     }
-  }, [editingGroup, updateCoordinatesFromMarker, setMap, setMarker, setEditingGroup, setLocationSelected]);
+  }, [editingGroup, setMap, setMarker, setEditingGroup, setLocationSelected]);
+
+  // Initialize Google Maps
+  useEffect(() => {
+    if (showLocationEdit && editingGroup) {
+      const loadGoogleMaps = () => {
+        // Check if Google Maps is already loaded to prevent multiple loads
+        if (!window.google && !window.googleMapsLoaded) {
+          // Set flag to prevent duplicate loads
+          window.googleMapsLoaded = true;
+          
+          const script = document.createElement('script');
+          // Use the new Places API
+          script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places&v=beta`;
+          script.async = true;
+          script.defer = true;
+          document.head.appendChild(script);
+          
+          script.onload = initMap;
+        } else if (window.google) {
+          initMap();
+        }
+      };
+      
+      loadGoogleMaps();
+      
+      // Cleanup function
+      return () => {
+        if (map) {
+          setMap(null);
+        }
+        if (marker) {
+          setMarker(null);
+        }
+      };
+    }
+  }, [showLocationEdit, editingGroup, map, marker, initMap]);
 
   const fetchGroups = async () => {
     setIsLoading(true);
