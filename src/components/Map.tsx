@@ -83,7 +83,7 @@ const Map = ({
   groups, 
   centerLat = -24.64970962763454, 
   centerLng = -47.8806330986609, 
-  zoom = 8,
+  zoom = 6,
   height = '500px',
   selectedGroupId = null
 }: MapProps) => {
