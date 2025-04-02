@@ -59,17 +59,12 @@
         {
           "key": "Cache-Control",
           "value": "private, no-cache, no-store, must-revalidate"
+        },
+        {
+          "key": "x-robots-tag",
+          "value": "noindex"
         }
       ]
-    }
-  ],
-  "routes": [
-    {
-      "src": "/admin",
-      "dest": "/admin",
-      "headers": {
-        "x-robots-tag": "noindex"
-      }
     }
   ]
 } 
