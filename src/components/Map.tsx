@@ -64,6 +64,9 @@ const Map = ({
   const [isMapReady, setIsMapReady] = useState(false);
   const markersRef = useRef<{[id: string]: google.maps.Marker}>({});
 
+  // Store state about whether markers are being created
+  const isUpdatingMarkers = useRef(false);
+
   // Implementação de initializeMap usando useCallback
   const initializeMap = useCallback(() => {
     // Ensure we have both the DOM element and Google Maps API
@@ -115,43 +118,96 @@ const Map = ({
     // Create a variable to track if component is mounted
     let isMounted = true;
 
-    // Prevent duplicate initialization
-    if (window.googleMapsInitialized) {
-      initializeMap();
-      return;
-    }
-
-    // Check if the Google Maps script is already loaded
-    if (!window.google) {
-      // Set a flag to prevent duplicate script loading
+    // Function to load Google Maps script
+    const loadGoogleMapsScript = () => {
+      // Set flag to prevent duplicate script loading
       window.googleMapsInitialized = true;
       
-      const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places&loading=async`;
-      script.async = true;
-      script.defer = true;
-      
-      // Only append the script if it's not already in the DOM
-      if (!document.querySelector(`script[src*="maps.googleapis.com/maps/api/js"]`)) {
-        document.head.appendChild(script);
+      return new Promise<void>((resolve, reject) => {
+        try {
+          // Create script element
+          const script = document.createElement('script');
+          script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places&callback=Function.prototype`;
+          script.async = true;
+          script.defer = true;
+          
+          // Handle script load
+          script.onload = () => resolve();
+          script.onerror = (error) => reject(error);
+          
+          // Add script to page
+          document.head.appendChild(script);
+        } catch (error) {
+          reject(error);
+        }
+      });
+    };
+
+    // Function to initialize map
+    const setupMap = async () => {
+      // If the component was unmounted, don't proceed
+      if (!isMounted) return;
+
+      // Check if the Google Maps script is already loaded
+      if (window.google && window.google.maps) {
+        initializeMap();
+        return;
       }
 
-      script.onload = () => {
-        // Only initialize if component is still mounted
-        if (isMounted) {
-          initializeMap();
+      // If the initialization flag is set but Google isn't available, we need to load it
+      if (window.googleMapsInitialized && !window.google) {
+        try {
+          await loadGoogleMapsScript();
+          if (isMounted) initializeMap();
+        } catch (error) {
+          console.error("Failed to load Google Maps:", error);
         }
-      };
-    } else {
-      window.googleMapsInitialized = true;
-      initializeMap();
-    }
+        return;
+      }
 
-    // Better cleanup function
+      // First time loading
+      if (!window.googleMapsInitialized) {
+        try {
+          // Check if a script is already in the DOM
+          if (!document.querySelector(`script[src*="maps.googleapis.com/maps/api/js"]`)) {
+            await loadGoogleMapsScript();
+          } else {
+            // Script tag exists but might not be loaded yet
+            window.googleMapsInitialized = true;
+          }
+          
+          // Wait for Google Maps to load
+          if (window.google && window.google.maps) {
+            if (isMounted) initializeMap();
+          } else {
+            // Poll for Google Maps to become available
+            const checkGoogleMaps = setInterval(() => {
+              if (window.google && window.google.maps) {
+                clearInterval(checkGoogleMaps);
+                if (isMounted) initializeMap();
+              }
+            }, 100);
+            
+            // Give up after 10 seconds to avoid infinite polling
+            setTimeout(() => {
+              clearInterval(checkGoogleMaps);
+              console.error("Timeout waiting for Google Maps to load");
+            }, 10000);
+          }
+        } catch (error) {
+          console.error("Error loading Google Maps:", error);
+        }
+      }
+    };
+
+    // Start the map setup process
+    setupMap();
+
+    // Cleanup function
     return () => {
       isMounted = false;
       
-      // Clear markers on unmount to prevent memory leaks
+      // Also clean up any existing markers to prevent memory leaks
       if (markers.length > 0) {
         markers.forEach(marker => {
           if (marker) marker.setMap(null);
@@ -167,6 +223,13 @@ const Map = ({
       return;
     }
 
+    // Prevent concurrent marker updates to avoid memory leaks
+    if (isUpdatingMarkers.current) {
+      return;
+    }
+
+    isUpdatingMarkers.current = true;
+
     try {
       // Don't proceed if there are no groups
       if (!groups || groups.length === 0) {
@@ -177,6 +240,7 @@ const Map = ({
         setMarkers([]);
         markersRef.current = {};
         console.log("Nenhum grupo para adicionar ao mapa");
+        isUpdatingMarkers.current = false;
         return;
       }
 
@@ -194,6 +258,7 @@ const Map = ({
         setMarkers([]);
         markersRef.current = {};
         console.log("Nenhuma coordenada válida nos grupos");
+        isUpdatingMarkers.current = false;
         return;
       }
 
@@ -209,17 +274,17 @@ const Map = ({
         // Default marker image
         const isSelected = group.id === selectedGroupId;
         
-        // Use different icon for selected marker
+        // Use different icon for selected marker - make it larger for selected
         const markerIcon = {
           url: isSelected 
             ? 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
             : 'https://maps.google.com/mapfiles/ms/icons/red-dot.png',
-          scaledSize: new window.google.maps.Size(isSelected ? 40 : 32, isSelected ? 40 : 32),
+          scaledSize: new window.google.maps.Size(isSelected ? 48 : 32, isSelected ? 48 : 32),
           origin: new window.google.maps.Point(0, 0),
-          anchor: new window.google.maps.Point(isSelected ? 20 : 16, isSelected ? 40 : 32)
+          anchor: new window.google.maps.Point(isSelected ? 24 : 16, isSelected ? 48 : 32)
         };
 
-        // Create and add the marker
+        // Create and add the marker - use DROP animation for all markers
         const marker = new window.google.maps.Marker({
           position: { 
             lat: group.coordinates.latitude, 
@@ -227,7 +292,7 @@ const Map = ({
           },
           map: map,
           title: group.university,
-          animation: isSelected ? window.google.maps.Animation.BOUNCE : window.google.maps.Animation.DROP,
+          animation: window.google.maps.Animation.DROP,
           icon: markerIcon,
           zIndex: isSelected ? 1000 : 1 // Selected marker appears on top
         });
@@ -338,6 +403,7 @@ const Map = ({
               
               // Zoom in closer to the selected marker
               map.setZoom(14);
+              isUpdatingMarkers.current = false;
               return; // Skip the bounds fitting
             }
           }
@@ -370,6 +436,8 @@ const Map = ({
       }
     } catch (error) {
       console.error("Erro ao adicionar marcadores ao mapa:", error);
+    } finally {
+      isUpdatingMarkers.current = false;
     }
   }, [isMapReady, map, infoWindow, groups, selectedGroupId, centerLat, centerLng, zoom]);
 
@@ -387,15 +455,26 @@ const Map = ({
         // Zoom in
         map.setZoom(14);
       }
-      
-      // Stop any bouncing animations on all markers after a short delay
-      setTimeout(() => {
-        Object.values(markersRef.current).forEach(marker => {
-          if (marker) marker.setAnimation(null);
-        });
-      }, 2500);
     }
   }, [selectedGroupId, isMapReady, map]);
+
+  // Cleanup effect for map when component unmounts
+  useEffect(() => {
+    return () => {
+      // Close info window if it exists
+      if (infoWindow) {
+        infoWindow.close();
+      }
+      
+      // Clear markers
+      markers.forEach(marker => {
+        if (marker) marker.setMap(null);
+      });
+      
+      // Clear internal marker references
+      markersRef.current = {};
+    };
+  }, [infoWindow, markers]);
 
   return (
     <div ref={mapRef} className="rounded-lg shadow-inner" style={{ width: '100%', height }} />
