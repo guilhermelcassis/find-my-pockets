@@ -112,6 +112,9 @@ const Map = ({
 
   // Initialize the map
   useEffect(() => {
+    // Create a variable to track if component is mounted
+    let isMounted = true;
+
     // Prevent duplicate initialization
     if (window.googleMapsInitialized) {
       initializeMap();
@@ -124,7 +127,7 @@ const Map = ({
       window.googleMapsInitialized = true;
       
       const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places&loading=async`;
       script.async = true;
       script.defer = true;
       
@@ -134,18 +137,28 @@ const Map = ({
       }
 
       script.onload = () => {
-        initializeMap();
-      };
-      
-      return () => {
-        // Cleanup shouldn't try to remove the script, as it might be used by other components
-        // Just leave it there to avoid issues
+        // Only initialize if component is still mounted
+        if (isMounted) {
+          initializeMap();
+        }
       };
     } else {
       window.googleMapsInitialized = true;
       initializeMap();
     }
-  }, [initializeMap]);
+
+    // Better cleanup function
+    return () => {
+      isMounted = false;
+      
+      // Clear markers on unmount to prevent memory leaks
+      if (markers.length > 0) {
+        markers.forEach(marker => {
+          if (marker) marker.setMap(null);
+        });
+      }
+    };
+  }, [initializeMap, markers]);
 
   // Add markers when map is ready and groups change
   useEffect(() => {
@@ -155,33 +168,44 @@ const Map = ({
     }
 
     try {
-      // Clear existing markers
-      markers.forEach(marker => {
-        if (marker) marker.setMap(null);
-      });
-      setMarkers([]);
-      markersRef.current = {};
-
       // Don't proceed if there are no groups
       if (!groups || groups.length === 0) {
+        // Clear existing markers if no groups
+        markers.forEach(marker => {
+          if (marker) marker.setMap(null);
+        });
+        setMarkers([]);
+        markersRef.current = {};
         console.log("Nenhum grupo para adicionar ao mapa");
         return;
       }
 
-      console.log(`Adicionando ${groups.length} marcadores ao mapa`);
-
-      // Add new markers
+      // Filter valid groups first
       const validGroups = groups.filter(group => 
         group.coordinates?.latitude && 
         group.coordinates?.longitude
       );
 
       if (validGroups.length === 0) {
+        // Clear existing markers if no valid groups
+        markers.forEach(marker => {
+          if (marker) marker.setMap(null);
+        });
+        setMarkers([]);
+        markersRef.current = {};
         console.log("Nenhuma coordenada válida nos grupos");
         return;
       }
 
-      const newMarkers = validGroups.map(group => {
+      console.log(`Adicionando ${validGroups.length} marcadores ao mapa`);
+
+      // Collect markers to remove
+      const markersToRemove = [...markers];
+      const newMarkersArray: google.maps.Marker[] = [];
+      const newMarkersMap: {[id: string]: google.maps.Marker} = {};
+
+      // Process each valid group
+      validGroups.forEach(group => {
         // Default marker image
         const isSelected = group.id === selectedGroupId;
         
@@ -208,8 +232,9 @@ const Map = ({
           zIndex: isSelected ? 1000 : 1 // Selected marker appears on top
         });
 
-        // Store reference to marker by group ID for later use
-        markersRef.current[group.id] = marker;
+        // Store reference to marker
+        newMarkersArray.push(marker);
+        newMarkersMap[group.id] = marker;
 
         // Create info window content with enhanced styling and contact info
         const content = `
@@ -287,14 +312,19 @@ const Map = ({
           infoWindow.setContent(content);
           infoWindow.open(map, marker);
         }
-
-        return marker;
       });
 
-      setMarkers(newMarkers);
+      // Remove old markers
+      markersToRemove.forEach(marker => {
+        if (marker) marker.setMap(null);
+      });
+
+      // Update state
+      setMarkers(newMarkersArray);
+      markersRef.current = newMarkersMap;
 
       // Auto-fit bounds if we have markers
-      if (newMarkers.length > 0) {
+      if (newMarkersArray.length > 0) {
         try {
           // If there's a selected marker, center on it with higher zoom
           if (selectedGroupId) {
@@ -315,7 +345,7 @@ const Map = ({
           // If no selected group or selected group not found, fit all markers
           const bounds = new window.google.maps.LatLngBounds();
           
-          newMarkers.forEach(marker => {
+          newMarkersArray.forEach(marker => {
             if (marker && marker.getPosition()) {
               const position = marker.getPosition();
               if (position) {
@@ -341,7 +371,7 @@ const Map = ({
     } catch (error) {
       console.error("Erro ao adicionar marcadores ao mapa:", error);
     }
-  }, [isMapReady, map, infoWindow, groups, selectedGroupId, markers, centerLat, centerLng, zoom]);
+  }, [isMapReady, map, infoWindow, groups, selectedGroupId, centerLat, centerLng, zoom]);
 
   // Handle changes to selectedGroupId
   useEffect(() => {
