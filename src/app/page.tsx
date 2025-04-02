@@ -21,9 +21,11 @@ export default function Home() {
   const [hasSearched, setHasSearched] = useState(false); // Track if user has searched
   const [mapKey, setMapKey] = useState(0); // Key to force map re-render
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null); // Track selected group
+  const [isTyping, setIsTyping] = useState(false); // Flag to prevent map updates during typing
   const searchInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
   const selectedResultRef = useRef<HTMLDivElement>(null);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Fetch all groups on initial load for the map
   useEffect(() => {
@@ -76,6 +78,7 @@ export default function Home() {
   // Fetch suggestions as user types
   useEffect(() => {
     const fetchSuggestions = async () => {
+      // Don't perform searches with very short terms
       if (searchTerm.trim().length < 2) {
         setSuggestions([]);
         setShowSuggestions(false);
@@ -87,61 +90,53 @@ export default function Home() {
         // Create search pattern that's case and accent insensitive
         const searchPattern = `%${normalizeText(searchTerm)}%`;
 
-        // Fetch distinct university names that match the search term
-        const { data: universityData, error: universityError } = await supabase
-          .from('groups')
-          .select('university')
-          .eq('active', true) // Only fetch from active groups
-          .or(`university.ilike.${searchPattern}, unaccent(university).ilike.${searchPattern}`)
-          .order('university')
-          .limit(5);
+        // First try the client-side approach to avoid unnecessary API calls and flickering
+        if (allGroups.length > 0) {
+          // Generate suggestions from existing all groups - no API call needed
+          const tempSuggestions = generateSuggestionsFromGroups(allGroups, searchTerm);
+          setSuggestions(tempSuggestions);
+          setShowSuggestions(tempSuggestions.length > 0);
+          setIsLoadingSuggestions(false);
+          return;
+        }
 
-        // Fetch distinct city names that match the search term
-        const { data: cityData, error: cityError } = await supabase
-          .from('groups')
-          .select('city')
-          .eq('active', true) // Only fetch from active groups
-          .or(`city.ilike.${searchPattern}, unaccent(city).ilike.${searchPattern}`)
-          .order('city')
-          .limit(3);
-        
-        // Fetch distinct state names that match the search term
-        const { data: stateData, error: stateError } = await supabase
-          .from('groups')
-          .select('state')
-          .eq('active', true) // Only fetch from active groups
-          .or(`state.ilike.${searchPattern}, unaccent(state).ilike.${searchPattern}`)
-          .order('state')
-          .limit(2);
-        
-        if (universityError || cityError || stateError) {
-          // Try a client-side fallback if the unaccent operation fails
-          if (allGroups.length === 0) {
-            // Fetch all groups if we don't have them already
-            const { data: allData, error: allError } = await supabase
+        // If we don't have groups cached, now try server-side
+        try {
+          // Use the regular ilike search without unaccent first to avoid 400 errors
+          const [universityResponse, cityResponse, stateResponse] = await Promise.all([
+            // Fetch distinct university names that match the search term
+            supabase
               .from('groups')
-              .select('*')
-              .eq('active', true); // Only fetch active groups
+              .select('university')
+              .eq('active', true)
+              .ilike('university', searchPattern)
+              .order('university')
+              .limit(5),
               
-            if (allError) throw allError;
-            setAllGroups(allData as Group[]);
-            
-            // Generate suggestions from all groups
-            const tempSuggestions = generateSuggestionsFromGroups(allData as Group[], searchTerm);
-            setSuggestions(tempSuggestions);
-            setShowSuggestions(tempSuggestions.length > 0);
-          } else {
-            // Generate suggestions from existing all groups
-            const tempSuggestions = generateSuggestionsFromGroups(allGroups, searchTerm);
-            setSuggestions(tempSuggestions);
-            setShowSuggestions(tempSuggestions.length > 0);
-          }
-        } else {
+            // Fetch distinct city names that match the search term
+            supabase
+              .from('groups')
+              .select('city')
+              .eq('active', true)
+              .ilike('city', searchPattern)
+              .order('city')
+              .limit(3),
+              
+            // Fetch distinct state names that match the search term
+            supabase
+              .from('groups')
+              .select('state')
+              .eq('active', true)
+              .ilike('state', searchPattern)
+              .order('state')
+              .limit(2)
+          ]);
+
           // Combine and deduplicate suggestions
           const allSuggestions = [
-            ...(universityData || []).map(item => item.university),
-            ...(cityData || []).map(item => item.city),
-            ...(stateData || []).map(item => item.state),
+            ...(universityResponse.data || []).map(item => item.university),
+            ...(cityResponse.data || []).map(item => item.city),
+            ...(stateResponse.data || []).map(item => item.state),
           ];
 
           // Remove duplicates
@@ -149,6 +144,22 @@ export default function Home() {
           
           setSuggestions(uniqueSuggestions);
           setShowSuggestions(uniqueSuggestions.length > 0);
+        } catch (error) {
+          console.warn("Regular search failed, falling back to all groups:", error);
+          
+          // Fetch all groups if we don't have them already
+          const { data: allData, error: allError } = await supabase
+            .from('groups')
+            .select('*')
+            .eq('active', true);
+            
+          if (allError) throw allError;
+          setAllGroups(allData as Group[]);
+          
+          // Generate suggestions from all groups
+          const tempSuggestions = generateSuggestionsFromGroups(allData as Group[], searchTerm);
+          setSuggestions(tempSuggestions);
+          setShowSuggestions(tempSuggestions.length > 0);
         }
       } catch (error) {
         console.error("Erro ao buscar sugestões:", error);
@@ -158,9 +169,10 @@ export default function Home() {
       }
     };
 
+    // Use a longer debounce to prevent too many requests while typing
     const timer = setTimeout(() => {
       fetchSuggestions();
-    }, 300); // Debounce to avoid too many requests
+    }, 500); // Increased debounce from 300ms to 500ms
 
     return () => clearTimeout(timer);
   }, [searchTerm, allGroups]);
@@ -223,10 +235,42 @@ export default function Home() {
     setMapKey(prevKey => prevKey + 1);
   };
 
+  // Function to safely set search term without causing map flickering
+  const updateSearchTerm = (value: string) => {
+    setIsTyping(true); // Set typing flag to true when search term changes
+    setSearchTerm(value);
+    
+    // Clear any existing timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    
+    // Set a timeout to mark the end of typing
+    searchTimeoutRef.current = setTimeout(() => {
+      setIsTyping(false);
+    }, 800); // A bit longer than the debounce time
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!searchTerm.trim()) return;
+    
+    // Clear typing state immediately when search is executed
+    setIsTyping(false);
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+      searchTimeoutRef.current = null;
+    }
     
     setIsLoading(true);
     setShowSuggestions(false);
@@ -237,21 +281,8 @@ export default function Home() {
       // Create search pattern that's case and accent insensitive
       const searchPattern = `%${normalizeText(searchTerm)}%`;
       
-      const { data, error } = await supabase
-        .from('groups')
-        .select('*')
-        .eq('active', true) // Only fetch active groups
-        .or(
-          `unaccent(university).ilike.${searchPattern},` +
-          `unaccent(city).ilike.${searchPattern},` +
-          `unaccent(state).ilike.${searchPattern},` +
-          `unaccent(country).ilike.${searchPattern}`
-        );
-      
-      if (error) {
-        console.warn("Busca com unaccent falhou, retornando à busca normal e filtragem do lado do cliente:", error);
-        
-        // First try regular ilike search without unaccent
+      try {
+        // Try the regular ilike search without unaccent first to avoid 400 errors
         const { data: fallbackData, error: fallbackError } = await supabase
           .from('groups')
           .select('*')
@@ -267,34 +298,62 @@ export default function Home() {
           throw fallbackError;
         }
         
-        // If there are no results, try to get all groups and filter client-side
-        if (fallbackData.length === 0) {
-          if (allGroups.length === 0) {
-            // Fetch all groups if we don't have them already
-            const { data: allData, error: allError } = await supabase
+        // If we got results, use them
+        if (fallbackData.length > 0) {
+          setSearchResults(fallbackData as Group[]);
+        } else {
+          // If no results with simple search, try unaccent (which can sometimes fail)
+          try {
+            const { data, error } = await supabase
               .from('groups')
               .select('*')
-              .eq('active', true); // Add filter for active groups
+              .eq('active', true) // Only fetch active groups
+              .or(
+                `unaccent(university).ilike.${searchPattern},` +
+                `unaccent(city).ilike.${searchPattern},` +
+                `unaccent(state).ilike.${searchPattern},` +
+                `unaccent(country).ilike.${searchPattern}`
+              );
               
-            if (allError) throw allError;
+            if (error) throw error;
+            setSearchResults(data as Group[]);
+          } catch (unaccentError) {
+            console.warn("Unaccent search failed, falling back to client-side filtering:", unaccentError);
             
-            setAllGroups(allData as Group[]);
-            // Filter the results client-side using our normalization function
-            const filteredResults = filterGroupsByNormalizedText(allData as Group[], searchTerm);
-            setSearchResults(filteredResults);
-          } else {
-            // Filter existing all groups
-            const filteredResults = filterGroupsByNormalizedText(allGroups, searchTerm);
-            setSearchResults(filteredResults);
+            // Client-side fallback as last resort
+            if (allGroups.length === 0) {
+              // Fetch all groups if we don't have them already
+              const { data: allData, error: allError } = await supabase
+                .from('groups')
+                .select('*')
+                .eq('active', true);
+                
+              if (allError) throw allError;
+              
+              setAllGroups(allData as Group[]);
+              // Filter the results client-side using our normalization function
+              const filteredResults = filterGroupsByNormalizedText(allData as Group[], searchTerm);
+              setSearchResults(filteredResults);
+            } else {
+              // Filter existing all groups
+              const filteredResults = filterGroupsByNormalizedText(allGroups, searchTerm);
+              setSearchResults(filteredResults);
+            }
           }
-        } else {
-          setSearchResults(fallbackData as Group[]);
         }
-      } else {
-        setSearchResults(data as Group[]);
+      } catch (error) {
+        console.error("All search attempts failed:", error);
+        
+        // Last resort - client-side only
+        if (allGroups.length > 0) {
+          const filteredResults = filterGroupsByNormalizedText(allGroups, searchTerm);
+          setSearchResults(filteredResults);
+        } else {
+          setSearchResults([]);
+        }
       }
       
-      // Force map re-render with new data
+      // Force map re-render with new data - done after all search processing is complete
       setMapKey(prevKey => prevKey + 1);
       
     } catch (error) {
@@ -305,6 +364,13 @@ export default function Home() {
   };
 
   const handleSelectSuggestion = (suggestion: string) => {
+    // Clear typing state as the user has made a selection
+    setIsTyping(false);
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+      searchTimeoutRef.current = null;
+    }
+    
     setSearchTerm(suggestion);
     setShowSuggestions(false);
     
@@ -333,7 +399,7 @@ export default function Home() {
                 ref={searchInputRef}
                 type="text"
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => updateSearchTerm(e.target.value)}
                 onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
                 placeholder="Pesquisar por universidade, cidade, estado ou país"
                 className="flex-grow p-3 border rounded-l focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -517,14 +583,13 @@ export default function Home() {
               </div>
             ) : (
               <Map 
-                key={mapKey} // Force re-render with new data
-                groups={searchResults.length > 0 
+                key={isTyping ? 0 : mapKey} // Only update key when not typing
+                groups={searchResults.length > 0 && !isTyping
                   ? searchResults.filter(group => group.active !== false) 
                   : allGroups.filter(group => group.active !== false)
                 } 
                 selectedGroupId={selectedGroupId}
-                zoom={searchResults.length > 0 ? 4 : 2}
-                height="calc(100% - 40px)"
+                height="100%"
               />
             )}
           </div>
