@@ -26,6 +26,7 @@ export default function Home() {
   const suggestionsRef = useRef<HTMLDivElement>(null);
   const selectedResultRef = useRef<HTMLDivElement>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const prevSearchResults = useRef<Group[]>([]);
 
   // Fetch all groups on initial load for the map
   useEffect(() => {
@@ -231,31 +232,35 @@ export default function Home() {
   // Function to handle clicking on a result
   const handleResultClick = (groupId: string) => {
     setSelectedGroupId(groupId);
-    // Force map to update (re-center on selected point)
-    setMapKey(prevKey => prevKey + 1);
+    // Force map to update (re-center on selected point) but don't change the key
+    // This will allow the map to center on the selected marker without full remounting
+    // setMapKey(prevKey => prevKey + 1); // Remove this line to prevent map reinitialization
   };
 
   // Function to safely set search term without causing map flickering
   const updateSearchTerm = (value: string) => {
-    setIsTyping(true); // Set typing flag to true when search term changes
+    // Set typing flag only, we don't need to change any keys or remount the map
+    setIsTyping(true);
     setSearchTerm(value);
     
     // Clear any existing timeout
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
+      searchTimeoutRef.current = null;
     }
     
     // Set a timeout to mark the end of typing
     searchTimeoutRef.current = setTimeout(() => {
       setIsTyping(false);
-    }, 800); // A bit longer than the debounce time
+    }, 1000);
   };
 
-  // Cleanup on unmount
+  // Cleanup on unmount - ensure all timeouts are cleared
   useEffect(() => {
     return () => {
       if (searchTimeoutRef.current) {
         clearTimeout(searchTimeoutRef.current);
+        searchTimeoutRef.current = null;
       }
     };
   }, []);
@@ -263,7 +268,8 @@ export default function Home() {
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!searchTerm.trim()) return;
+    // Don't perform searches with empty or very short terms
+    if (!searchTerm.trim() || searchTerm.trim().length < 2) return;
     
     // Clear typing state immediately when search is executed
     setIsTyping(false);
@@ -276,6 +282,9 @@ export default function Home() {
     setShowSuggestions(false);
     setHasSearched(true); // Mark that a search has been performed
     setSelectedGroupId(null); // Reset selected group when new search is performed
+    
+    // Store current search results before updating them
+    prevSearchResults.current = searchResults;
     
     try {
       // Create search pattern that's case and accent insensitive
@@ -371,6 +380,9 @@ export default function Home() {
       searchTimeoutRef.current = null;
     }
     
+    // Store current search results before updating
+    prevSearchResults.current = searchResults;
+    
     setSearchTerm(suggestion);
     setShowSuggestions(false);
     
@@ -384,14 +396,14 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen p-4">
+    <main className="min-h-screen p-4 flex flex-col">
       {/* Page title */}
       <h1 className="text-3xl font-bold text-center mb-6">
         Encontre Pockets Dunamis nas Universidades
       </h1>
       
       {/* Search field centered at the top */}
-      <div className="max-w-3xl mx-auto mb-6">
+      <div className="max-w-3xl mx-auto mb-6 w-full">
         <form onSubmit={handleSearch}>
           <div className="relative">
             <div className="flex">
@@ -407,7 +419,7 @@ export default function Home() {
               />
               <button
                 type="submit"
-                className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-r"
+                className="bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-r w-[140px] transition-colors"
                 disabled={isLoading}
               >
                 {isLoading ? 'Pesquisando...' : 'Pesquisar'}
@@ -448,7 +460,7 @@ export default function Home() {
       </div>
       
       {/* Main content: Results (30%) and Map (70%) - switched order */}
-      <div className="flex flex-col lg:flex-row gap-4 h-[calc(100vh-220px)]">
+      <div className="flex flex-col lg:flex-row gap-4 h-[calc(100vh-220px)] min-h-[500px] max-h-[800px] mb-4 flex-grow">
         {/* Results section - 30% - now on the left */}
         <div className="lg:w-[30%] h-full overflow-y-auto bg-white border rounded shadow-sm p-4">
           {/* Display search results */}
@@ -570,28 +582,35 @@ export default function Home() {
         </div>
         
         {/* Map section - 70% - now on the right */}
-        <div className="lg:w-[70%] h-full">
-          <div className="bg-white p-4 border rounded shadow-sm h-full">
+        <div className="lg:w-[70%] h-full overflow-hidden">
+          <div className="bg-white p-4 border rounded shadow-sm h-full flex flex-col">
             <h2 className="text-xl font-semibold mb-3">
               {searchResults.length > 0 
                 ? `Localizações nas Universidades (${searchResults.length})` 
                 : `Todas as Localizações (${allGroups.length})`}
             </h2>
-            {isLoadingInitial ? (
-              <div className="flex justify-center items-center h-[90%]">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-              </div>
-            ) : (
-              <Map 
-                key={isTyping ? 0 : mapKey} // Only update key when not typing
-                groups={searchResults.length > 0 && !isTyping
-                  ? searchResults.filter(group => group.active !== false) 
-                  : allGroups.filter(group => group.active !== false)
-                } 
-                selectedGroupId={selectedGroupId}
-                height="100%"
-              />
-            )}
+            <div className="flex-grow relative" style={{ minHeight: "400px" }}>
+              {isLoadingInitial ? (
+                <div className="flex justify-center items-center h-full">
+                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+                </div>
+              ) : (
+                <>
+                  {/* Always use the same static key to prevent map reinitialization */}
+                  <Map 
+                    key="persistent-map"
+                    groups={isTyping 
+                      ? (prevSearchResults.current.length > 0 ? prevSearchResults.current : allGroups).filter(group => group.active !== false)
+                      : (searchResults.length > 0
+                          ? searchResults 
+                          : allGroups).filter(group => group.active !== false)
+                    } 
+                    selectedGroupId={selectedGroupId}
+                    height="100%"
+                  />
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>

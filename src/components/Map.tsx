@@ -77,11 +77,6 @@ interface GoogleMapOptions {
   fullscreenControl?: boolean;
   zoomControl?: boolean;
   mapId?: string;
-  styles?: Array<{
-    featureType?: string;
-    elementType?: string;
-    stylers: Array<{ [key: string]: string }>;
-  }>;
 }
 
 const Map = ({ 
@@ -114,6 +109,8 @@ const Map = ({
   // Add a counter to track initialization attempts and prevent loops
   const initAttemptRef = useRef<number>(0);
   const componentMountedRef = useRef<boolean>(false);
+  // Store previous group IDs to prevent unnecessary redraws
+  const prevGroupIds = useRef<string>('');
 
   // Initialize map function (called after Google Maps is loaded)
   const initializeMap = useCallback(() => {
@@ -161,17 +158,6 @@ const Map = ({
         zoomControl: true,
         // Adding a default mapId for advanced markers
         mapId: process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || '8f077ee2408e83c5',
-        styles: [
-          {
-            featureType: "poi.business",
-            stylers: [{ visibility: "off" }]
-          },
-          {
-            featureType: "transit",
-            elementType: "labels.icon",
-            stylers: [{ visibility: "off" }]
-          }
-        ]
       };
 
       // Create new map instance
@@ -195,150 +181,95 @@ const Map = ({
     }
   }, [centerLat, centerLng, zoom]);
 
-  // Function to load Google Maps API once
-  const loadGoogleMapsAPI = useCallback(() => {
-    // Don't load if already loaded or loading
-    if (window.google?.maps) {
-      console.log("Google Maps already loaded, initializing map");
+  // Load Google Maps API
+  const loadGoogleMapsAPI = useCallback(async (): Promise<void> => {
+    // Don't try to load if already loaded
+    if (window.google?.maps?.Map) {
+      console.log("Google Maps API already loaded");
       initializeMap();
-      return Promise.resolve();
+      return;
     }
     
+    // Don't try to load if already loading
     if (googleMapsLoadingRef.current) {
-      console.log("Google Maps is already loading, waiting");
-      return Promise.resolve();
+      console.log("Google Maps API already loading");
+      return;
     }
-
-    // Check the global guard if available
-    if (window.__GOOGLE_MAPS_INIT_GUARD) {
-      if (window.__GOOGLE_MAPS_INIT_GUARD.initialized) {
-        console.log("Google Maps already initialized via global guard");
-        initializeMap();
-        return Promise.resolve();
-      }
-      
-      if (window.__GOOGLE_MAPS_INIT_GUARD.loading) {
-        console.log("Google Maps already loading via global guard");
-        return new Promise<void>((resolve) => {
-          if (window.__GOOGLE_MAPS_INIT_GUARD?.callbacks) {
-            window.__GOOGLE_MAPS_INIT_GUARD.callbacks.push(() => {
-              resolve();
-              initializeMap();
-            });
-          } else {
-            // Fallback in case callbacks array is not available
-            setTimeout(() => {
-              resolve();
-              initializeMap();
-            }, 1000);
-          }
-        });
-      }
-      
-      // Mark as loading in the global guard
-      window.__GOOGLE_MAPS_INIT_GUARD.loading = true;
-    }
-
+    
     googleMapsLoadingRef.current = true;
-    console.log("Starting Google Maps API load");
-
-    return new Promise<void>((resolve, reject) => {
-      // Set a timeout to detect if loading takes too long
-      loadTimeoutRef.current = setTimeout(() => {
-        setLoadError("Google Maps took too long to load. Please refresh the page.");
-        googleMapsLoadingRef.current = false;
-        if (window.__GOOGLE_MAPS_INIT_GUARD) {
-          window.__GOOGLE_MAPS_INIT_GUARD.loading = false;
-        }
-        reject(new Error("Google Maps loading timeout"));
-      }, 20000); // 20 seconds timeout - increased to be more patient
-
-      // Create a global callback function
-      window.initializeGoogleMaps = () => {
-        if (loadTimeoutRef.current) {
-          clearTimeout(loadTimeoutRef.current);
-          loadTimeoutRef.current = null;
-        }
-        window.googleMapsLoaded = true;
-        googleMapsLoadingRef.current = false;
-        console.log("Google Maps API loaded via callback");
-        resolve();
-        
-        // Initialize the map after the callback is triggered
-        if (componentMountedRef.current) {
-          initializeMap();
-        }
-      };
-
+    
+    return new Promise((resolve, reject) => {
       try {
-        // Check if the script is already in the document
-        const existingScript = document.querySelector('script[src*="maps.googleapis.com/maps/api/js"]');
-        if (existingScript) {
-          console.log("Google Maps script already exists, not adding again");
-          if (loadTimeoutRef.current) {
-            clearTimeout(loadTimeoutRef.current);
-            loadTimeoutRef.current = null;
+        console.log("Starting Google Maps API load");
+        
+        // Set global callback for API
+        window.initializeGoogleMaps = () => {
+          if (!componentMountedRef.current) {
+            console.log("Component unmounted before API loaded, aborting initialization");
+            return;
           }
+          
+          console.log("Google Maps API loaded via callback");
           googleMapsLoadingRef.current = false;
           
-          // If the API is already loaded but not initialized properly, try again
-          if (window.google?.maps) {
-            resolve();
+          try {
             initializeMap();
+            resolve();
+          } catch (error) {
+            console.error("Error in initialization callback:", error);
+            reject(error);
           }
+        };
+        
+        // Check if script already exists (to avoid duplicates)
+        const existingScript = document.getElementById('google-maps-script');
+        if (existingScript) {
+          console.log("Google Maps script already exists in document");
+          // If script exists but API not available, it's probably still loading
           return;
         }
         
-        const script = document.createElement('script');
+        // Create script element
         const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-        
         if (!apiKey) {
-          if (loadTimeoutRef.current) {
-            clearTimeout(loadTimeoutRef.current);
-            loadTimeoutRef.current = null;
-          }
-          setLoadError("Google Maps API key is missing. Please check your environment variables.");
-          googleMapsLoadingRef.current = false;
-          if (window.__GOOGLE_MAPS_INIT_GUARD) {
-            window.__GOOGLE_MAPS_INIT_GUARD.loading = false;
-          }
-          reject(new Error("Google Maps API key is missing"));
+          const error = new Error("Google Maps API key is missing");
+          setLoadError(error.message);
+          reject(error);
           return;
         }
         
-        // Update script URL to include marker library for Advanced Markers
-        // Use the guarded callback if available
-        const callbackName = window.initializeGoogleMapsGuarded ? 'initializeGoogleMapsGuarded' : 'initializeGoogleMaps';
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,marker&v=beta&loading=async&callback=${callbackName}`;
+        const mapId = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || '8f077ee2408e83c5';
+        const script = document.createElement('script');
+        script.id = 'google-maps-script';
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initializeGoogleMaps&libraries=marker&v=beta&mapIds=${mapId}`;
         script.async = true;
         script.defer = true;
         
+        // Handle errors in script loading
         script.onerror = (error) => {
-          if (loadTimeoutRef.current) {
-            clearTimeout(loadTimeoutRef.current);
-            loadTimeoutRef.current = null;
-          }
-          setLoadError("Failed to load Google Maps. Please check your internet connection and try again.");
+          console.error("Error loading Google Maps script:", error);
           googleMapsLoadingRef.current = false;
-          if (window.__GOOGLE_MAPS_INIT_GUARD) {
-            window.__GOOGLE_MAPS_INIT_GUARD.loading = false;
-          }
-          reject(error);
+          setLoadError("Failed to load Google Maps. Please check your connection and try again.");
+          reject(new Error("Failed to load Google Maps script"));
         };
         
         document.head.appendChild(script);
         console.log("Added Google Maps script to document");
+        
+        // Set a timeout to prevent hanging indefinitely
+        loadTimeoutRef.current = setTimeout(() => {
+          if (googleMapsLoadingRef.current) {
+            console.error("Google Maps API load timed out");
+            googleMapsLoadingRef.current = false;
+            setLoadError("Google Maps failed to load within the expected time. Please refresh the page.");
+            reject(new Error("Google Maps API load timeout"));
+          }
+        }, 15000); // 15 seconds timeout
+        
       } catch (error) {
-        console.error("Error adding Google Maps script:", error);
-        if (loadTimeoutRef.current) {
-          clearTimeout(loadTimeoutRef.current);
-          loadTimeoutRef.current = null;
-        }
-        setLoadError("An error occurred while loading Google Maps.");
+        console.error("Error during API load setup:", error);
         googleMapsLoadingRef.current = false;
-        if (window.__GOOGLE_MAPS_INIT_GUARD) {
-          window.__GOOGLE_MAPS_INIT_GUARD.loading = false;
-        }
+        setLoadError(`Failed to load Google Maps: ${error instanceof Error ? error.message : 'Unknown error'}`);
         reject(error);
       }
     });
@@ -350,10 +281,20 @@ const Map = ({
     let isMounted = true;
     let initialRun = true;
     
-    // Reset any remnants from previous mounts
+    // Reset any remnants from previous mounts - Add more aggressive cleanup
     mapInitializedRef.current = false;
     googleMapsLoadingRef.current = false;
     initAttemptRef.current = 0;
+    
+    // Clear any existing markers to prevent memory leaks
+    Object.values(markersRef.current).forEach(marker => {
+      if (marker) {
+        if ('setMap' in marker) {
+          marker.setMap(null);
+        }
+      }
+    });
+    markersRef.current = {};
     
     const setupMap = async () => {
       if (!isMounted || !initialRun) return;
@@ -375,7 +316,7 @@ const Map = ({
     setupMap();
 
     return () => {
-      // Component unmounting
+      // Component unmounting - Enhanced cleanup
       console.log("Map component unmounting, cleaning up");
       componentMountedRef.current = false;
       isMounted = false;
@@ -387,6 +328,16 @@ const Map = ({
         loadTimeoutRef.current = null;
       }
       
+      // Clean up all markers
+      Object.values(markersRef.current).forEach(marker => {
+        if (marker) {
+          if ('setMap' in marker) {
+            marker.setMap(null);
+          }
+        }
+      });
+      markersRef.current = {};
+      
       // Clean up global callback to prevent multiple registrations
       if (window.initializeGoogleMaps) {
         window.initializeGoogleMaps = () => {
@@ -394,35 +345,82 @@ const Map = ({
         };
       }
     };
-  }, []); // Empty dependency array - setup only on mount
+  }, []);
 
-  // Function to create an advanced marker (used if supported)
+  // Function to create a advanced marker with fallbacks
   const createAdvancedMarker = useCallback((group: Group, isSelected: boolean, map: google.maps.Map) => {
-    if (!window.google?.maps?.marker) return null;
-
     try {
-      // Create a pin with different appearance for selected markers
-      const pin = new window.google.maps.marker.PinElement({
-        scale: isSelected ? 1.4 : 1.0,
-        background: isSelected ? '#4285F4' : '#E53935',
-        borderColor: isSelected ? '#2A56C6' : '#B31412',
-        glyphColor: 'white',
-      });
+      // Advanced Marker Element requires the marker package
+      if (!window.google.maps.marker || !window.google.maps.marker.AdvancedMarkerElement) {
+        console.warn("Advanced marker not available, falling back to legacy marker");
+        return null;
+      }
       
-      // Create the advanced marker - using pin.element instead of pin directly
-      const advancedMarker = new window.google.maps.marker.AdvancedMarkerElement({
+      // Create container for marker content
+      const container = document.createElement('div');
+      
+      // Define background color based on selection
+      const bgColor = isSelected ? '#1e88e5' : '#e53935'; // Blue for selected, red for normal
+      
+      // Create marker pin element with appropriate styling
+      container.innerHTML = `
+        <div style="
+          width: ${isSelected ? '40px' : '32px'};
+          height: ${isSelected ? '40px' : '32px'};
+          background: ${bgColor};
+          border-radius: 50% 50% 0% 50%;
+          transform: rotate(45deg);
+          border: 2px solid white;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+          transition: all 0.3s ease;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: ${isSelected ? 1000 : 100};
+        ">
+          <div style="
+            font-weight: bold;
+            color: white;
+            transform: rotate(-45deg);
+            font-size: ${isSelected ? '16px' : '14px'};
+            text-align: center;
+            font-family: sans-serif;
+          ">P</div>
+        </div>
+      `;
+      
+      // Create the advanced marker
+      const marker = new window.google.maps.marker.AdvancedMarkerElement({
+        map: map,
         position: { 
           lat: group.coordinates.latitude, 
           lng: group.coordinates.longitude 
         },
-        map: map,
         title: group.university,
-        content: pin.element, // Fixed: accessing the element property of PinElement
-        zIndex: isSelected ? 1000 : 1, // Selected marker appears on top
-        gmpClickable: true,
+        content: container,
+        zIndex: isSelected ? 1000 : 100
       });
       
-      return advancedMarker;
+      // If selected, add bounce animation - no direct animation APIs, so we use CSS/setTimeout
+      if (isSelected) {
+        container.style.animation = 'bounce 0.8s ease';
+        container.style.transformOrigin = 'bottom center';
+        
+        // Define animation in a <style> element if not already defined
+        if (!document.getElementById('marker-animations')) {
+          const style = document.createElement('style');
+          style.id = 'marker-animations';
+          style.textContent = `
+            @keyframes bounce {
+              0%, 100% { transform: translateY(0) rotate(45deg); }
+              50% { transform: translateY(-15px) rotate(45deg); }
+            }
+          `;
+          document.head.appendChild(style);
+        }
+      }
+      
+      return marker;
     } catch (error) {
       console.error("Error creating advanced marker:", error);
       return null;
@@ -469,27 +467,51 @@ const Map = ({
       return;
     }
 
-    // Prevent concurrent marker updates
-    if (isUpdatingMarkers.current) {
+    // Skip if we're currently updating markers to prevent race conditions
+    if (isUpdatingMarkers.current) return;
+    
+    // Check if groups array has the same ids as before - if so, don't redraw markers
+    // This prevents unnecessary marker redraws when only isTyping state changes
+    const currentGroupIds = groups.map(g => g.id).sort().join(',');
+    
+    // If nothing has changed, only selectedGroupId, don't redraw all markers
+    if (currentGroupIds === prevGroupIds.current && !selectedGroupId) {
       return;
     }
-
-    console.log(`Adding ${groups?.length || 0} markers to map`);
-    // Debug logs to check active status
-    if (groups?.length > 0) {
-      const inactiveGroups = groups.filter(g => g.active === false);
-      if (inactiveGroups.length > 0) {
-        console.warn(`Warning: ${inactiveGroups.length} inactive groups detected in map data:`, 
-          inactiveGroups.map(g => `${g.university} (${g.city}, ${g.state})`));
-      }
-    }
     
+    // Update the reference for next comparison
+    prevGroupIds.current = currentGroupIds;
+    
+    // Set flag to prevent parallel updates
     isUpdatingMarkers.current = true;
 
-    // Track any setTimeout IDs we create for later cleanup
+    // Keep track of timeouts to clear when the component unmounts
     const timeoutIds: NodeJS.Timeout[] = [];
-
+    
     try {
+      // Check that map is still valid before proceeding
+      if (!map || typeof map.getBounds !== 'function') {
+        console.warn('Map is not ready or invalid, skipping marker update');
+        isUpdatingMarkers.current = false;
+        return;
+      }
+      
+      // Filter out inactive groups and handle bad data
+      const validGroups = groups.filter(group => {
+        return (
+          group.active !== false &&
+          group.coordinates && 
+          typeof group.coordinates === 'object' &&
+          'latitude' in group.coordinates &&
+          'longitude' in group.coordinates &&
+          !isNaN(Number(group.coordinates.latitude)) &&
+          !isNaN(Number(group.coordinates.longitude))
+        );
+      });
+
+      console.log("Adding", validGroups.length, "markers to map");
+      console.log("Found", validGroups.length, "valid active groups out of", groups.length, "total groups");
+
       // First close any open info windows to reset state
       if (infoWindow) {
         infoWindow.close();
@@ -509,22 +531,6 @@ const Map = ({
 
       // Don't proceed if there are no groups
       if (!groups || groups.length === 0) {
-        setMarkers([]);
-        markersRef.current = {};
-        isUpdatingMarkers.current = false;
-        return;
-      }
-
-      // Filter valid groups first - also filter out inactive groups
-      const validGroups = groups.filter(group => 
-        group.coordinates?.latitude && 
-        group.coordinates?.longitude &&
-        group.active !== false
-      );
-
-      console.log(`Found ${validGroups.length} valid active groups out of ${groups.length} total groups`);
-
-      if (validGroups.length === 0) {
         setMarkers([]);
         markersRef.current = {};
         isUpdatingMarkers.current = false;
@@ -639,73 +645,61 @@ const Map = ({
           </div>
         `;
 
-        // Add click listener to open info window
-        if (marker instanceof google.maps.Marker) {
+        // Add event listeners for markers
+        if (marker) {
           // For legacy marker
-          marker.addListener('click', () => {
-            infoWindow.close();
-            infoWindow.setContent(content);
-            infoWindow.open(map, marker);
-            
-            // Also center on this marker when clicked
-            const position = marker.getPosition();
-            if (position) {
-              map.panTo(position);
-              map.setZoom(14);
-            }
-          });
-          
-          // If this marker is selected, open its info window immediately
-          if (isSelected) {
-            // Log position data for debugging
-            console.log('Opening info window for legacy marker:', group.university);
-            
-            setTimeout(() => {
+          if (marker instanceof google.maps.Marker) {
+            marker.addListener('click', () => {
+              infoWindow.close();
               infoWindow.setContent(content);
               infoWindow.open(map, marker);
               
-              // Ensure map is centered on this marker
-              const position = marker.getPosition();
-              if (position) {
-                console.log('Centering map on position:', position.lat(), position.lng());
-                map.setCenter(position);
-                map.setZoom(14);
-              }
-            }, 200);
-          }
-        } else {
-          // For advanced marker
-          const position = { 
-            lat: group.coordinates.latitude, 
-            lng: group.coordinates.longitude 
-          };
-          
-          marker.addEventListener('click', () => {
-            infoWindow.close();
-            infoWindow.setContent(content);
-            infoWindow.open(map);
-            infoWindow.setPosition(position);
+              // Center map on this marker with a slightly higher zoom
+              map.panTo(marker.getPosition() as google.maps.LatLng);
+              map.setZoom(14);
+            });
             
-            // Also center on this marker when clicked
-            map.panTo(position);
-            map.setZoom(14);
-          });
-          
-          // If this marker is selected, open its info window immediately
-          if (isSelected) {
-            // Log position data for debugging
-            console.log('Opening info window for advanced marker:', group.university);
-            console.log('Position:', position);
+            // Immediately open info window for selected marker
+            if (isSelected) {
+              infoWindow.setContent(content);
+              infoWindow.open(map, marker);
+              map.panTo(marker.getPosition() as google.maps.LatLng);
+              map.setZoom(14);
+            }
+          } else {
+            // For advanced marker - use 'gmp-click' instead of 'click'
+            const position = { 
+              lat: group.coordinates.latitude, 
+              lng: group.coordinates.longitude 
+            };
             
-            setTimeout(() => {
+            marker.addEventListener('gmp-click', () => {
+              infoWindow.close();
               infoWindow.setContent(content);
               infoWindow.open(map);
               infoWindow.setPosition(position);
               
-              // Ensure map is centered on this marker
-              map.setCenter(position);
+              // Also center on this marker when clicked
+              map.panTo(position);
               map.setZoom(14);
-            }, 200);
+            });
+            
+            // If this marker is selected, open its info window immediately
+            if (isSelected) {
+              // Log position data for debugging
+              console.log('Opening info window for advanced marker:', group.university);
+              console.log('Position:', position);
+              
+              setTimeout(() => {
+                infoWindow.setContent(content);
+                infoWindow.open(map);
+                infoWindow.setPosition(position);
+                
+                // Ensure map is centered on this marker
+                map.setCenter(position);
+                map.setZoom(14);
+              }, 200);
+            }
           }
         }
       });
@@ -878,36 +872,109 @@ const Map = ({
     };
   }, [isMapReady, map, infoWindow, groups, selectedGroupId, centerLat, centerLng, zoom, supportsAdvancedMarkers, createAdvancedMarker, createLegacyMarker, initialZoomDone]);
 
-  // Clean up when component unmounts
+  // Add a separate effect to handle just the selectedGroupId changes
   useEffect(() => {
-    return () => {
-      console.log("Cleanup effect running");
-      // Clean up all markers
-      markers.forEach(marker => {
-        if (marker) {
-          if (marker instanceof google.maps.Marker) {
-            marker.setMap(null);
-          } else {
-            // For AdvancedMarkerElement
-            marker.map = null;
-          }
+    // Skip if map or infoWindow is not ready yet
+    if (!map || !infoWindow || !isMapReady) return;
+    
+    // Find the selected group
+    const selectedGroup = selectedGroupId 
+      ? groups.find(g => g.id === selectedGroupId) 
+      : null;
+    
+    if (selectedGroup) {
+      // Center the map on the selected group
+      const position = {
+        lat: selectedGroup.coordinates.latitude,
+        lng: selectedGroup.coordinates.longitude
+      };
+      
+      // Center the map without forcing a full marker redraw
+      map.setCenter(position);
+      map.setZoom(15);
+      
+      // Find the marker in our reference object
+      const marker = selectedGroupId ? markersRef.current[selectedGroupId] : null;
+      
+      if (marker) {
+        // Create info window content
+        const content = `
+          <div style="padding: 8px; max-width: 300px; font-family: Arial, sans-serif;">
+            <h3 style="font-weight: bold; font-size: 16px; margin-bottom: 5px;">${selectedGroup.university}</h3>
+            <p style="margin: 4px 0; color: #555;">${selectedGroup.city}, ${selectedGroup.state}, ${selectedGroup.country}</p>
+            
+            <div style="margin-top: 8px;">
+              <p style="margin: 4px 0; font-size: 14px;">
+                <span style="font-weight: 500;">Encontros:</span> Toda ${selectedGroup.dayofweek} às ${selectedGroup.time}
+              </p>
+              ${selectedGroup.local ? 
+                `<p style="margin: 4px 0; font-size: 14px;">
+                  <span style="font-weight: 500;">Local:</span> ${selectedGroup.local}
+                </p>` : ''}
+            </div>
+
+            ${selectedGroup.fulladdress ? 
+              `<div style="margin-top: 8px;">
+                <p style="margin: 4px 0; font-size: 14px;">
+                  <span style="font-weight: 500;">Endereço:</span> ${selectedGroup.fulladdress}
+                </p>
+                <a 
+                  href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedGroup.fulladdress)}"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style="color: #4285F4; text-decoration: none; font-size: 13px; display: inline-block; margin-top: 4px;"
+                >
+                  🗺️ Como Chegar
+                </a>
+              </div>` : ''}
+
+            <div style="margin-top: 8px;">
+              <p style="margin: 4px 0; font-size: 14px;">
+                <span style="font-weight: 500;">Líder:</span> ${selectedGroup.leader?.name || 'Desconhecido'}
+              </p>
+              ${selectedGroup.leader?.email ? 
+                `<p style="margin: 4px 0; font-size: 14px;">
+                  <span style="font-weight: 500;">E-mail:</span> ${selectedGroup.leader?.email}
+                </p>` : ''}
+            </div>
+
+            <div style="margin-top: 10px; display: flex; gap: 8px;">
+              ${selectedGroup.leader?.phone ? 
+                `<a 
+                  href="https://wa.me/${(selectedGroup.leader?.phone || '').replace(/\D/g, '')}"
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  style="background-color: #25D366; color: white; padding: 4px 8px; border-radius: 4px; text-decoration: none; font-size: 13px;"
+                >
+                  WhatsApp
+                </a>` : ''}
+              
+              ${selectedGroup.instagram ? 
+                `<a 
+                  href="https://instagram.com/${selectedGroup.instagram.replace('@', '')}"
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  style="background-color: #E1306C; color: white; padding: 4px 8px; border-radius: 4px; text-decoration: none; font-size: 13px;"
+                >
+                  Instagram
+                </a>` : ''}
+            </div>
+          </div>
+        `;
+        
+        // Open info window on the marker
+        infoWindow.setContent(content);
+        
+        if (marker instanceof google.maps.Marker) {
+          infoWindow.open(map, marker);
+        } else {
+          // For advanced marker
+          infoWindow.setPosition(position);
+          infoWindow.open(map);
         }
-      });
-      
-      // Close info window
-      if (infoWindow) {
-        infoWindow.close();
       }
-      
-      // Reset internal marker references
-      markersRef.current = {};
-      
-      // Reset flags
-      mapInitializedRef.current = false;
-      googleMapsLoadingRef.current = false;
-      initAttemptRef.current = 0;
-    };
-  }, [markers, infoWindow]);
+    }
+  }, [selectedGroupId, map, infoWindow, isMapReady, groups]);
 
   // Apply a skeleton loader style to mimic the map before it loads
   const skeletonStyle = {
@@ -916,9 +983,9 @@ const Map = ({
     animation: 'pulse 1.5s ease-in-out infinite, shimmer 2s infinite linear',
   };
 
-  // No more showing loading states, just have the map container ready and show the error if needed
+  // Adjust return to ensure map container has proper dimensions
   return (
-    <div className="relative rounded-lg shadow-inner" style={{ width: '100%', height }}>
+    <div className="relative rounded-lg shadow-inner" style={{ width: '100%', height, minHeight: '400px', maxHeight: '100%' }}>
       {/* Always visible map container with skeleton background while loading */}
       <div 
         ref={mapRef} 
