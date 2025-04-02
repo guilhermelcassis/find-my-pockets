@@ -10,19 +10,21 @@ interface Leader {
   phone: string;
   email: string;
   curso: string;
+  active?: boolean;
 }
 
 export default function LeadersPage() {
   const [leaders, setLeaders] = useState<Leader[]>([]);
-  const [newLeader, setNewLeader] = useState({ name: '', phone: '', email: '', curso: '' });
+  const [newLeader, setNewLeader] = useState({ name: '', phone: '', email: '', curso: '', active: true });
   const [editingLeader, setEditingLeader] = useState<Leader | null>(null);
   const [statusMessage, setStatusMessage] = useState<{text: string, type: 'success' | 'error' | 'info'} | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [filterActive, setFilterActive] = useState<'all' | 'active' | 'inactive'>('active');
 
-  // Fetch leaders on component mount
+  // Fetch leaders on component mount or when filter changes
   useEffect(() => {
     fetchLeaders();
-  }, []);
+  }, [filterActive]);
 
   const fetchLeaders = async () => {
     setIsLoading(true);
@@ -33,7 +35,26 @@ export default function LeadersPage() {
       
       if (error) throw error;
       
-      setLeaders(data as Leader[]);
+      // Make sure active is set for all leaders (default to true if not specified)
+      const leadersData = data as Leader[];
+      leadersData.forEach(leader => {
+        if (leader.active === undefined) {
+          leader.active = true;
+        }
+      });
+      
+      // Filter leaders based on active status
+      let filteredLeaders = leadersData;
+      if (filterActive === 'active') {
+        filteredLeaders = leadersData.filter(leader => leader.active !== false);
+      } else if (filterActive === 'inactive') {
+        filteredLeaders = leadersData.filter(leader => leader.active === false);
+      }
+      
+      // Sort by name
+      filteredLeaders.sort((a, b) => a.name.localeCompare(b.name));
+      
+      setLeaders(filteredLeaders);
     } catch (error) {
       console.error("Error fetching leaders:", error);
       setStatusMessage({ text: `Erro ao buscar líderes: ${error instanceof Error ? error.message : 'Erro desconhecido'}`, type: 'error' });
@@ -62,7 +83,7 @@ export default function LeadersPage() {
       
       // Update UI
       setStatusMessage({ text: `Líder ${newLeader.name} adicionado com sucesso!`, type: 'success' });
-      setNewLeader({ name: '', phone: '', email: '', curso: '' });
+      setNewLeader({ name: '', phone: '', email: '', curso: '', active: true });
       
       // Refresh leaders list
       fetchLeaders();
@@ -107,7 +128,8 @@ export default function LeadersPage() {
           name: editingLeader.name,
           phone: editingLeader.phone,
           email: editingLeader.email,
-          curso: editingLeader.curso
+          curso: editingLeader.curso,
+          active: editingLeader.active ?? true
         })
         .eq('id', editingLeader.id);
       
@@ -125,24 +147,45 @@ export default function LeadersPage() {
     }
   };
 
-  const deleteLeader = async (id: string, name: string) => {
-    if (!confirm(`Tem certeza que deseja excluir ${name}?`)) {
+  const deactivateLeader = async (id: string, name: string) => {
+    if (!confirm(`Tem certeza que deseja desativar ${name}? Você poderá reativá-lo depois.`)) {
       return;
     }
 
     try {
       const { error } = await supabase
         .from('leaders')
-        .delete()
+        .update({ active: false })
         .eq('id', id);
       
       if (error) throw error;
       
-      setStatusMessage({ text: `Líder ${name} excluído com sucesso`, type: 'success' });
+      setStatusMessage({ text: `Líder ${name} desativado com sucesso`, type: 'success' });
       fetchLeaders();
     } catch (error) {
-      console.error("Error deleting leader:", error);
-      setStatusMessage({ text: `Erro ao excluir líder: ${error instanceof Error ? error.message : 'Erro desconhecido'}`, type: 'error' });
+      console.error("Error deactivating leader:", error);
+      setStatusMessage({ text: `Erro ao desativar líder: ${error instanceof Error ? error.message : 'Erro desconhecido'}`, type: 'error' });
+    }
+  };
+  
+  const reactivateLeader = async (id: string, name: string) => {
+    if (!confirm(`Deseja reativar ${name}?`)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('leaders')
+        .update({ active: true })
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      setStatusMessage({ text: `Líder ${name} reativado com sucesso`, type: 'success' });
+      fetchLeaders();
+    } catch (error) {
+      console.error("Error reactivating leader:", error);
+      setStatusMessage({ text: `Erro ao reativar líder: ${error instanceof Error ? error.message : 'Erro desconhecido'}`, type: 'error' });
     }
   };
 
@@ -227,7 +270,25 @@ export default function LeadersPage() {
         
         {/* Leaders list */}
         <div>
-          <h2 className="text-xl font-semibold mb-4">Lista de Líderes</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">Lista de Líderes ({leaders.length})</h2>
+            
+            {/* Add filter dropdown */}
+            <div className="flex items-center space-x-2">
+              <label htmlFor="leader-status-filter" className="text-sm font-medium text-gray-700">Exibir:</label>
+              <select 
+                id="leader-status-filter"
+                value={filterActive}
+                onChange={(e) => setFilterActive(e.target.value as 'all' | 'active' | 'inactive')}
+                className="border rounded px-3 py-1 text-sm"
+              >
+                <option value="active">Apenas Ativos</option>
+                <option value="inactive">Apenas Inativos</option>
+                <option value="all">Todos</option>
+              </select>
+            </div>
+          </div>
+          
           {isLoading ? (
             <div className="flex justify-center items-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
@@ -241,7 +302,7 @@ export default function LeadersPage() {
                   className={`border rounded shadow-sm transition-all duration-300 ${
                     editingLeader && editingLeader.id === leader.id 
                       ? 'border-blue-400 bg-blue-50 transform scale-[1.02]' 
-                      : 'hover:border-gray-300 hover:shadow'
+                      : !leader.active ? 'bg-gray-50 opacity-75 border-gray-300' : 'hover:border-gray-300 hover:shadow'
                   }`}
                 >
                   {editingLeader && editingLeader.id === leader.id ? (
@@ -253,22 +314,21 @@ export default function LeadersPage() {
                       }}
                     >
                       <div>
-                        <label className="block text-xs mb-1 text-gray-600">Nome</label>
+                        <label className="block text-sm text-gray-600 mb-1">Nome</label>
                         <input 
                           type="text"
-                          className="w-full border p-2 rounded text-sm focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all"
+                          className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all"
                           value={editingLeader.name}
                           onChange={(e) => handleEditChange(e, 'name')}
                           required
-                          autoFocus
                         />
                       </div>
                       
                       <div>
-                        <label className="block text-xs mb-1 text-gray-600">Telefone</label>
+                        <label className="block text-sm text-gray-600 mb-1">Telefone</label>
                         <input 
                           type="text"
-                          className="w-full border p-2 rounded text-sm focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all"
+                          className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all"
                           value={editingLeader.phone}
                           onChange={(e) => handleEditChange(e, 'phone')}
                           required
@@ -276,51 +336,50 @@ export default function LeadersPage() {
                       </div>
                       
                       <div>
-                        <label className="block text-xs mb-1 text-gray-600">E-mail</label>
+                        <label className="block text-sm text-gray-600 mb-1">E-mail</label>
                         <input 
                           type="email"
-                          className="w-full border p-2 rounded text-sm focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all"
+                          className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all"
                           value={editingLeader.email}
                           onChange={(e) => handleEditChange(e, 'email')}
                         />
                       </div>
                       
                       <div>
-                        <label className="block text-xs mb-1 text-gray-600">Curso</label>
+                        <label className="block text-sm text-gray-600 mb-1">Curso</label>
                         <input 
                           type="text"
-                          className="w-full border p-2 rounded text-sm focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all"
+                          className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all"
                           value={editingLeader.curso}
                           onChange={(e) => handleEditChange(e, 'curso')}
                         />
                       </div>
                       
-                      <div className="flex space-x-2 mt-3">
-                        <button 
-                          type="submit"
-                          className="bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded text-sm flex items-center transition duration-200"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                          Salvar
-                        </button>
+                      <div className="flex justify-end space-x-2 pt-2">
                         <button 
                           type="button"
                           onClick={cancelEditing}
-                          className="bg-gray-300 hover:bg-gray-400 text-gray-800 py-2 px-4 rounded text-sm flex items-center transition duration-200"
+                          className="px-3 py-1 border rounded bg-gray-100 hover:bg-gray-200 text-gray-800 transition duration-200"
                         >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
                           Cancelar
+                        </button>
+                        <button 
+                          type="submit"
+                          className="px-3 py-1 rounded bg-blue-500 hover:bg-blue-600 text-white transition duration-200"
+                        >
+                          Salvar
                         </button>
                       </div>
                     </form>
                   ) : (
-                    <div className="flex justify-between items-center p-3">
+                    <div className="flex justify-between items-start p-3">
                       <div className="flex-1">
-                        <div className="font-medium">{leader.name}</div>
+                        <div className="font-medium flex items-center">
+                          {leader.name}
+                          {!leader.active && (
+                            <span className="ml-2 bg-gray-500 text-white text-xs px-2 py-1 rounded">Inativo</span>
+                          )}
+                        </div>
                         <div className="text-sm text-gray-600">{leader.phone}</div>
                         {leader.email && (
                           <div className="text-sm text-gray-600">{leader.email}</div>
@@ -340,16 +399,30 @@ export default function LeadersPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                           </svg>
                         </button>
-                        <button 
-                          onClick={() => deleteLeader(leader.id, leader.name)}
-                          className="text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50 transition duration-200"
-                          title="Excluir líder"
-                          aria-label={`Excluir ${leader.name}`}
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
+                        
+                        {leader.active ? (
+                          <button 
+                            onClick={() => deactivateLeader(leader.id, leader.name)}
+                            className="text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50 transition duration-200"
+                            title="Desativar líder"
+                            aria-label={`Desativar ${leader.name}`}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                            </svg>
+                          </button>
+                        ) : (
+                          <button 
+                            onClick={() => reactivateLeader(leader.id, leader.name)}
+                            className="text-green-600 hover:text-green-800 p-1 rounded hover:bg-green-50 transition duration-200"
+                            title="Reativar líder"
+                            aria-label={`Reativar ${leader.name}`}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </button>
+                        )}
                       </div>
                     </div>
                   )}
@@ -358,7 +431,11 @@ export default function LeadersPage() {
             </ul>
           ) : (
             <div className="text-center py-8 border rounded bg-gray-50">
-              <p className="text-gray-500">Nenhum líder ainda. Adicione seu primeiro líder!</p>
+              <p className="text-gray-500">
+                {filterActive === 'active' ? 'Nenhum líder ativo encontrado.' :
+                 filterActive === 'inactive' ? 'Nenhum líder inativo encontrado.' :
+                 'Nenhum líder cadastrado. Adicione seu primeiro líder!'}
+              </p>
             </div>
           )}
         </div>

@@ -29,15 +29,17 @@ export default function Home() {
   useEffect(() => {
     const fetchAllGroups = async () => {
       try {
+        // Updated query to only fetch active groups
         const { data, error } = await supabase
           .from('groups')
-          .select('*');
+          .select('*')
+          .eq('active', true);
         
         if (error) throw error;
         
         setAllGroups(data as Group[]);
       } catch (error) {
-        console.error("Erro ao buscar todos os grupos:", error);
+        console.error("Erro ao buscar grupos ativos:", error);
       } finally {
         setIsLoadingInitial(false);
       }
@@ -89,6 +91,7 @@ export default function Home() {
         const { data: universityData, error: universityError } = await supabase
           .from('groups')
           .select('university')
+          .eq('active', true) // Only fetch from active groups
           .or(`university.ilike.${searchPattern}, unaccent(university).ilike.${searchPattern}`)
           .order('university')
           .limit(5);
@@ -97,6 +100,7 @@ export default function Home() {
         const { data: cityData, error: cityError } = await supabase
           .from('groups')
           .select('city')
+          .eq('active', true) // Only fetch from active groups
           .or(`city.ilike.${searchPattern}, unaccent(city).ilike.${searchPattern}`)
           .order('city')
           .limit(3);
@@ -105,6 +109,7 @@ export default function Home() {
         const { data: stateData, error: stateError } = await supabase
           .from('groups')
           .select('state')
+          .eq('active', true) // Only fetch from active groups
           .or(`state.ilike.${searchPattern}, unaccent(state).ilike.${searchPattern}`)
           .order('state')
           .limit(2);
@@ -113,7 +118,11 @@ export default function Home() {
           // Try a client-side fallback if the unaccent operation fails
           if (allGroups.length === 0) {
             // Fetch all groups if we don't have them already
-            const { data: allData, error: allError } = await supabase.from('groups').select('*');
+            const { data: allData, error: allError } = await supabase
+              .from('groups')
+              .select('*')
+              .eq('active', true); // Only fetch active groups
+              
             if (allError) throw allError;
             setAllGroups(allData as Group[]);
             
@@ -161,7 +170,10 @@ export default function Home() {
     const normalizedTerm = normalizeText(term);
     const suggestionsSet = new Set<string>();
     
-    groups.forEach(group => {
+    // First filter out any inactive groups
+    const activeGroups = groups.filter(group => group.active !== false);
+    
+    activeGroups.forEach(group => {
       // Check if university matches
       if (normalizeText(group.university).includes(normalizedTerm)) {
         suggestionsSet.add(group.university);
@@ -193,6 +205,9 @@ export default function Home() {
     const normalizedTerm = normalizeText(term);
     
     return groups.filter(group => {
+      // First ensure the group is active
+      if (group.active === false) return false;
+      
       // Check various fields for matches
       return normalizeText(group.university).includes(normalizedTerm) ||
              normalizeText(group.city).includes(normalizedTerm) ||
@@ -225,6 +240,7 @@ export default function Home() {
       const { data, error } = await supabase
         .from('groups')
         .select('*')
+        .eq('active', true) // Only fetch active groups
         .or(
           `unaccent(university).ilike.${searchPattern},` +
           `unaccent(city).ilike.${searchPattern},` +
@@ -239,6 +255,7 @@ export default function Home() {
         const { data: fallbackData, error: fallbackError } = await supabase
           .from('groups')
           .select('*')
+          .eq('active', true) // Only fetch active groups
           .or(
             `university.ilike.${searchPattern},` +
             `city.ilike.${searchPattern},` +
@@ -254,7 +271,11 @@ export default function Home() {
         if (fallbackData.length === 0) {
           if (allGroups.length === 0) {
             // Fetch all groups if we don't have them already
-            const { data: allData, error: allError } = await supabase.from('groups').select('*');
+            const { data: allData, error: allError } = await supabase
+              .from('groups')
+              .select('*')
+              .eq('active', true); // Add filter for active groups
+              
             if (allError) throw allError;
             
             setAllGroups(allData as Group[]);
@@ -497,7 +518,10 @@ export default function Home() {
             ) : (
               <Map 
                 key={mapKey} // Force re-render with new data
-                groups={searchResults.length > 0 ? searchResults : allGroups} 
+                groups={searchResults.length > 0 
+                  ? searchResults.filter(group => group.active !== false) 
+                  : allGroups.filter(group => group.active !== false)
+                } 
                 selectedGroupId={selectedGroupId}
                 zoom={searchResults.length > 0 ? 4 : 2}
                 height="calc(100% - 40px)"

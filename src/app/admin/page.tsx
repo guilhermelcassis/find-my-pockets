@@ -96,8 +96,8 @@ function AdminMapComponent({
           lng: initialCoordinates.longitude || -34.949283 
         },
         map: mapInstance,
-        draggable: true,
-        title: "Arraste para a localização exata"
+        draggable: false,
+        title: "Localização selecionada"
       });
       
       // Add click listener to map
@@ -176,14 +176,13 @@ function AdminMapComponent({
 const AdminPage = () => {
     const mapRef = useRef<HTMLDivElement>(null);
     const autocompleteInputRef = useRef<HTMLInputElement>(null);
+    const leaderDropdownRef = useRef<HTMLDivElement>(null); // Ref for the leader dropdown
     const [map, setMap] = useState<google.maps.Map | null>(null);
     const [marker, setMarker] = useState<google.maps.Marker | null>(null);
     const [statusMessage, setStatusMessage] = useState<{text: string, type: 'success' | 'error' | 'info'} | null>(null);
-    const [leaders, setLeaders] = useState<{ id: string; name: string; phone: string; email: string; curso: string }[]>([]);
+    const [leaders, setLeaders] = useState<{ id: string; name: string; phone: string; email: string; curso: string; active?: boolean }[]>([]);
     const [selectedLeaderId, setSelectedLeaderId] = useState<string>('');
     const [locationSelected, setLocationSelected] = useState<boolean>(false);
-    const [isValidatingInstagram, setIsValidatingInstagram] = useState<boolean>(false);
-    const [isInstagramValid, setIsInstagramValid] = useState<boolean | null>(null);
     const [showMap, setShowMap] = useState<boolean>(false);
     const [mapsApiLoaded, setMapsApiLoaded] = useState<boolean>(false);
     const [autocompleteInitialized, setAutocompleteInitialized] = useState<boolean>(false);
@@ -213,6 +212,7 @@ const AdminPage = () => {
         coordinates: { latitude: 0, longitude: 0 },
         fulladdress: '',
         zipcode: '',
+        active: true // Add active status
     });
 
     // Separate function to initialize just the autocomplete - can be called independently
@@ -396,13 +396,18 @@ const AdminPage = () => {
                 if (error) throw error;
                 
                 if (leadersData && isMounted) {
-                    setLeaders(leadersData.map(leader => ({
+                    const formattedLeaders = leadersData.map(leader => ({
                         id: leader.id,
                         name: leader.name,
                         phone: leader.phone,
                         email: leader.email || '',
-                        curso: leader.curso || ''
-                    })));
+                        curso: leader.curso || '',
+                        active: leader.active ?? true
+                    }));
+                    
+                    setLeaders(formattedLeaders);
+                    // Only include active leaders by default in the filtered list
+                    setFilteredLeaders(formattedLeaders.filter(leader => leader.active !== false));
                 }
             } catch (error) {
                 console.error("Erro ao buscar líderes:", error);
@@ -440,115 +445,90 @@ const AdminPage = () => {
         }));
     }, []);
 
-    // Validate Instagram username
-    const validateInstagram = async (username: string) => {
-        if (!username) {
-            setIsInstagramValid(null);
-            return;
-        }
-        
-        // Remove @ if present
-        const cleanUsername = username.startsWith('@') ? username.substring(1) : username;
-        
-        if (!cleanUsername) {
-            setIsInstagramValid(null);
-            return;
-        }
-        
-        // First, check basic format validation
-        const isFormatValid = /^[a-zA-Z0-9_.]{1,30}$/.test(cleanUsername);
-        if (!isFormatValid) {
-            setIsInstagramValid(false);
-            return;
-        }
-        
-        setIsValidatingInstagram(true);
-        
+    // Instagram username validation function - completely client-side
+    const validateInstagram = (value: string): boolean => {
         try {
-            // Manual verification by checking if the profile URL exists
-            const profileUrl = `https://www.instagram.com/${cleanUsername.replace('@', '')}/?__a=1`;
+            // Remove @ if present
+            let username = value.trim();
+            if (username.startsWith('@')) {
+                username = username.substring(1);
+            }
             
-            // Make a request to check if the profile exists
-            await fetch(profileUrl, {
-                method: 'HEAD'
-            });
+            // Basic validation
+            if (username.length < 1 || username.length > 30) {
+                return false;
+            }
             
-            // If we can access the page without a 404 error, assume the profile exists
-            // Note: Due to CORS restrictions, we might not get detailed status information
-            // The no-cors mode will restrict what information we can access
+            // Check if only contains letters, numbers, underscores, and periods
+            if (!/^[a-zA-Z0-9_.]+$/.test(username)) {
+                return false;
+            }
             
-            // Format the username with @ if it doesn't already have it
-            const formattedUsername = cleanUsername.startsWith('@') ? cleanUsername : `@${cleanUsername}`;
-            setIsInstagramValid(true);
-            setGroup(prev => ({ ...prev, instagram: formattedUsername }));
+            // Check if doesn't have consecutive periods
+            if (username.includes('..')) {
+                return false;
+            }
             
+            // Check if doesn't start or end with period
+            if (username.startsWith('.') || username.endsWith('.')) {
+                return false;
+            }
+            
+            return true;
         } catch (error) {
-            console.error("Erro ao validar Instagram:", error);
-            setIsInstagramValid(false);
-        } finally {
-            setIsValidatingInstagram(false);
+            console.error("Error validating Instagram:", error);
+            return false;
         }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setStatusMessage({ text: 'Salvando grupo...', type: 'info' });
-        
+        setStatusMessage({ text: 'Adicionando grupo...', type: 'info' });
+
         try {
-            // Find the selected leader
-            const selectedLeader = leaders.find(leader => leader.id === selectedLeaderId);
-            
-            if (!selectedLeader) {
+            // Validate required fields
+            if (!group.university || !group.dayofweek || !group.time) {
+                throw new Error("Universidade, dia da semana e horário são obrigatórios");
+            }
+
+            if (!selectedLeaderId) {
                 throw new Error("Por favor, selecione um líder");
             }
-            
-            // Validate required fields
-            if (!group.university) {
-                throw new Error("Por favor, selecione uma universidade pesquisando e clicando no mapa");
+
+            // Find the selected leader
+            const selectedLeader = leaders.find(leader => leader.id === selectedLeaderId);
+            if (!selectedLeader) {
+                throw new Error("Líder selecionado não encontrado");
             }
-            
-            if (!group.dayofweek) {
-                throw new Error("Por favor, selecione um dia da semana");
+
+            // Validate Instagram if provided
+            if (group.instagram && !validateInstagram(group.instagram)) {
+                throw new Error("Nome de usuário do Instagram inválido");
             }
-            
-            if (!group.time) {
-                throw new Error("Por favor, informe um horário");
-            }
-            
-            // Prepare the data with all required fields
-            // IMPORTANT: Case sensitivity matters for Supabase column names
-            const groupToSave = {
-                name: group.name || 'Dunamis Pocket',
-                university: group.university,
-                city: group.city,
-                state: group.state,
-                country: group.country,
-                location: group.location,
-                instagram: group.instagram || '',
-                dayofweek: group.dayofweek,
-                time: group.time,
-                tipo: group.tipo || 'Publica',
-                local: group.local || '',
-                // Use lowercase to match database column names
-                fulladdress: group.fulladdress || '',  // Changed from fulladdress to fulladdress
-                zipcode: group.zipcode || '',          // Changed from zipCode to zipcode
+
+            // Create object with all the group data
+            const groupData = {
+                ...group,
                 leader: {
                     name: selectedLeader.name,
                     phone: selectedLeader.phone,
                     email: selectedLeader.email || '',
-                    curso: selectedLeader.curso || ''
+                    curso: selectedLeader.curso || '',
+                    active: selectedLeader.active ?? true
                 },
-                coordinates: group.coordinates,
+                leader_id: selectedLeaderId, // Add the leader_id field
+                location: group.university, // Set location same as university name
                 created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
+                updated_at: new Date().toISOString(),
+                active: true // New groups are active by default
             };
             
-            console.log("Salvando dados do grupo:", groupToSave);
+            console.log("Salvando dados do grupo:", groupData);
             
             // Add group to Supabase
             const { data: insertedGroup, error } = await db
                 .from('groups')
-                .insert([groupToSave])
+                .insert([groupData])
                 .select()
                 .single();
                 
@@ -577,11 +557,11 @@ const AdminPage = () => {
                 coordinates: { latitude: -24.65236500245874, longitude: -47.87912740708651 },
                 fulladdress: '',
                 zipcode: '',
+                active: true
             });
             
             setSelectedLeaderId('');
             setLocationSelected(false);
-            setIsInstagramValid(null);
             
             // Reset marker to default position if map exists
             if (map && marker) {
@@ -619,6 +599,23 @@ const AdminPage = () => {
             setStatusMessage({ text: `Erro: ${errorMessage}`, type: 'error' });
         }
     };
+
+    const [showLeaderDropdown, setShowLeaderDropdown] = useState<boolean>(false);
+    const [filteredLeaders, setFilteredLeaders] = useState<{ id: string; name: string; phone: string; email: string; curso: string; active?: boolean }[]>([]);
+
+    // Add click outside handler for leader dropdown
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (leaderDropdownRef.current && !leaderDropdownRef.current.contains(event.target as Node)) {
+                setShowLeaderDropdown(false);
+            }
+        };
+        
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, []);
 
     return (
         <>
@@ -760,7 +757,7 @@ const AdminPage = () => {
                     
                     <p className="text-sm text-gray-600 mt-2">
                         {locationSelected 
-                            ? "A universidade selecionada está marcada no mapa. Você pode arrastar o marcador para ajustar a localização exata."
+                            ? "A universidade selecionada está marcada no mapa."
                             : "Clique no mapa ou pesquise uma universidade acima para definir a localização."}
                     </p>
                     {group.coordinates.latitude !== 0 && (
@@ -842,19 +839,6 @@ const AdminPage = () => {
                             <p className="font-medium">{group.zipcode}</p>
                         </div>
                     )}
-                    
-                    {/* Location */}
-                    <div className="bg-white p-3 rounded shadow-sm col-span-full">
-                        <h3 className="text-sm text-gray-500">Localização Específica</h3>
-                        <input 
-                            type="text" 
-                            value={group.location}
-                            className="w-full border p-2 rounded mt-1" 
-                            placeholder="Localização específica no campus" 
-                            onChange={(e) => setGroup({ ...group, location: e.target.value })} 
-                            required 
-                        />
-                    </div>
                 </div>
 
                 {/* Group Meeting Details */}
@@ -931,60 +915,117 @@ const AdminPage = () => {
                                 <input 
                                     type="text" 
                                     value={group.instagram}
-                                    className={`w-full border p-2 rounded pl-6 ${
-                                        isInstagramValid === true ? 'border-green-500' : 
-                                        isInstagramValid === false ? 'border-red-500' : ''
-                                    }`} 
+                                    className="w-full border p-2 rounded pl-6" 
                                     placeholder="@usuário" 
-                                    onChange={(e) => {
-                                        setGroup({ ...group, instagram: e.target.value });
-                                        // Don't validate on every keystroke to avoid excessive requests
-                                        if (isInstagramValid !== null) {
-                                            setIsInstagramValid(null);
-                                        }
-                                    }}
-                                    required 
+                                    onChange={(e) => setGroup({ ...group, instagram: e.target.value })}
                                 />
                                 <span className="absolute left-2 top-2.5 text-gray-500">@</span>
-                                {isValidatingInstagram && (
-                                    <span className="absolute right-2 top-2.5 text-blue-500">Verificando...</span>
-                                )}
-                                {isInstagramValid === true && !isValidatingInstagram && (
-                                    <span className="absolute right-2 top-2.5 text-green-500">✓ Válido</span>
-                                )}
-                                {isInstagramValid === false && !isValidatingInstagram && (
-                                    <span className="absolute right-2 top-2.5 text-red-500">Inválido</span>
-                                )}
                             </div>
-                            <div className="flex items-center justify-between mt-1">
-                                <p className="text-xs text-gray-500">Informe um nome de usuário válido do Instagram</p>
-                                <button 
-                                    type="button"
-                                    className="text-xs text-blue-500 hover:text-blue-700"
-                                    onClick={() => validateInstagram(group.instagram)}
-                                    disabled={isValidatingInstagram || !group.instagram}
-                                >
-                                    Verificar Perfil
-                                </button>
-                            </div>
-                            <p className="text-xs text-gray-500 mt-1 italic">Verificamos se o perfil do Instagram realmente existe.</p>
+                            <p className="text-xs text-gray-500 mt-1">Informe o nome de usuário do Instagram</p>
                         </div>
 
                         <div>
                             <label className="block mb-1">Líder</label>
-                            <select
-                                value={selectedLeaderId}
-                                className="w-full border p-2 rounded"
-                                onChange={(e) => setSelectedLeaderId(e.target.value)}
-                                required
-                            >
-                                <option value="">Selecione um líder</option>
-                                {leaders.map(leader => (
-                                    <option key={leader.id} value={leader.id}>
-                                        {leader.name} ({leader.phone}) - {leader.curso ? leader.curso : 'Sem Curso'}
-                                    </option>
-                                ))}
-                            </select>
+                            
+                            {/* Searchable Leader Dropdown */}
+                            <div className="relative" ref={leaderDropdownRef}>
+                                {/* Search Input */}
+                                <input 
+                                    type="text" 
+                                    className="w-full border p-2 rounded"
+                                    placeholder="Buscar líder por nome..."
+                                    onChange={(e) => {
+                                        // Filter leaders based on input
+                                        const searchTerm = e.target.value.toLowerCase();
+                                        
+                                        // If input is cleared and a leader was previously selected, keep showing that one
+                                        if (searchTerm === '' && selectedLeaderId) {
+                                            const selected = leaders.find(l => l.id === selectedLeaderId);
+                                            if (selected) {
+                                                setFilteredLeaders([selected]);
+                                            } else {
+                                                // Only include active leaders
+                                                setFilteredLeaders(leaders.filter(leader => leader.active !== false));
+                                            }
+                                        } else {
+                                            // Filter based on search term and active status
+                                            const filtered = leaders.filter(leader => 
+                                                leader.active !== false && (
+                                                leader.name.toLowerCase().includes(searchTerm) || 
+                                                leader.phone.includes(searchTerm) ||
+                                                (leader.curso && leader.curso.toLowerCase().includes(searchTerm))
+                                            ));
+                                            setFilteredLeaders(filtered);
+                                        }
+                                        
+                                        // Show dropdown when typing
+                                        setShowLeaderDropdown(true);
+                                    }}
+                                    onFocus={() => setShowLeaderDropdown(true)}
+                                />
+                                
+                                {/* Dropdown Icon */}
+                                <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                                    </svg>
+                                </div>
+                                
+                                {/* Dropdown Menu */}
+                                {showLeaderDropdown && (
+                                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto">
+                                        {filteredLeaders.length > 0 ? (
+                                            filteredLeaders
+                                                .sort((a, b) => a.name.localeCompare(b.name)) // Sort alphabetically
+                                                .map(leader => (
+                                                <div 
+                                                    key={leader.id} 
+                                                    className={`p-2 cursor-pointer hover:bg-blue-50 ${
+                                                        selectedLeaderId === leader.id ? 'bg-blue-100' : ''
+                                                    }`}
+                                                    onClick={() => {
+                                                        setSelectedLeaderId(leader.id);
+                                                        setShowLeaderDropdown(false);
+                                                    }}
+                                                >
+                                                    <div className="font-medium">{leader.name}</div>
+                                                    <div className="text-xs text-gray-600">
+                                                        {leader.phone} {leader.curso ? `• ${leader.curso}` : ''}
+                                                    </div>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="p-2 text-gray-500">
+                                                Nenhum líder encontrado
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                            
+                            <p className="text-xs text-gray-500 mt-1">
+                                Digite o nome do líder, telefone ou curso para buscar
+                            </p>
+                            
+                            {/* Display currently selected leader */}
+                            {selectedLeaderId && (
+                                <div className="mt-2 p-2 bg-blue-50 border border-blue-100 rounded">
+                                    <p className="font-medium">Líder selecionado:</p>
+                                    {(() => {
+                                        const selected = leaders.find(l => l.id === selectedLeaderId);
+                                        return selected ? (
+                                            <div className="text-sm">
+                                                {selected.name} ({selected.phone})
+                                                {selected.curso && <span> • {selected.curso}</span>}
+                                            </div>
+                                        ) : (
+                                            <div className="text-sm text-yellow-600">
+                                                Líder não encontrado na lista
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

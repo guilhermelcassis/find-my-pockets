@@ -475,6 +475,15 @@ const Map = ({
     }
 
     console.log(`Adding ${groups?.length || 0} markers to map`);
+    // Debug logs to check active status
+    if (groups?.length > 0) {
+      const inactiveGroups = groups.filter(g => g.active === false);
+      if (inactiveGroups.length > 0) {
+        console.warn(`Warning: ${inactiveGroups.length} inactive groups detected in map data:`, 
+          inactiveGroups.map(g => `${g.university} (${g.city}, ${g.state})`));
+      }
+    }
+    
     isUpdatingMarkers.current = true;
 
     // Track any setTimeout IDs we create for later cleanup
@@ -506,11 +515,14 @@ const Map = ({
         return;
       }
 
-      // Filter valid groups first
+      // Filter valid groups first - also filter out inactive groups
       const validGroups = groups.filter(group => 
         group.coordinates?.latitude && 
-        group.coordinates?.longitude
+        group.coordinates?.longitude &&
+        group.active !== false
       );
+
+      console.log(`Found ${validGroups.length} valid active groups out of ${groups.length} total groups`);
 
       if (validGroups.length === 0) {
         setMarkers([]);

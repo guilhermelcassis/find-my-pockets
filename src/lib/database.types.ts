@@ -8,6 +8,7 @@ export interface Leader {
   phone: string;
   email: string;
   curso: string;
+  active?: boolean;
 }
 
 export interface Database {
@@ -26,6 +27,7 @@ export interface Database {
           dayofweek: string;
           time: string;
           leader: Leader;
+          leader_id?: string;
           coordinates: Coordinates;
           tipo?: string;
           local?: string;
@@ -33,6 +35,7 @@ export interface Database {
           zipcode?: string;
           created_at?: string;
           updated_at?: string;
+          active?: boolean;
         };
         Insert: {
           id?: string;
@@ -46,6 +49,7 @@ export interface Database {
           dayofweek: string;
           time: string;
           leader: Leader;
+          leader_id?: string;
           coordinates: Coordinates;
           tipo?: string;
           local?: string;
@@ -53,6 +57,7 @@ export interface Database {
           zipcode?: string;
           created_at?: string;
           updated_at?: string;
+          active?: boolean;
         };
         Update: {
           id?: string;
@@ -66,12 +71,14 @@ export interface Database {
           dayofweek?: string;
           time?: string;
           leader?: Leader;
+          leader_id?: string;
           coordinates?: Coordinates;
           tipo?: string;
           local?: string;
           fulladdress?: string;
           zipcode?: string;
           updated_at?: string;
+          active?: boolean;
         };
       };
       leaders: {
@@ -82,6 +89,7 @@ export interface Database {
           email: string;
           curso: string;
           created_at?: string;
+          active?: boolean;
         };
         Insert: {
           id?: string;
@@ -90,6 +98,7 @@ export interface Database {
           email: string;
           curso: string;
           created_at?: string;
+          active?: boolean;
         };
         Update: {
           id?: string;
@@ -98,6 +107,7 @@ export interface Database {
           email?: string;
           curso?: string;
           updated_at?: string;
+          active?: boolean;
         };
       };
     };
