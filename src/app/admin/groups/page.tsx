@@ -42,21 +42,57 @@ export default function GroupsPage() {
   // Fetch leaders
   const fetchLeaders = async () => {
     try {
+      // First get all leaders
       const { data: leadersData, error } = await supabase
         .from('leaders')
         .select('*');
       
       if (error) throw error;
+
+      // Then get all groups to check which leaders are already assigned
+      const { data: groupsData, error: groupsError } = await supabase
+        .from('groups')
+        .select('leader_id')
+        .eq('active', true);
+      
+      if (groupsError) throw groupsError;
       
       if (leadersData) {
-        setLeaders(leadersData.map(leader => ({
+        const formattedLeaders = leadersData.map(leader => ({
           id: leader.id,
           name: leader.name,
           phone: leader.phone,
           email: leader.email || '',
           curso: leader.curso || '',
           active: leader.active ?? true
-        })));
+        }));
+
+        // Get array of leader_ids that are already assigned to active groups
+        const assignedLeaderIds = groupsData
+          .filter(group => group.leader_id)
+          .map(group => group.leader_id);
+        
+        // If we're editing a group, we need to include its current leader in the available options
+        // even if that leader is assigned to this group
+        if (editingGroup && editingGroup.leader_id) {
+          const currentEditingLeaderId = editingGroup.leader_id;
+          
+          // Filter out leaders that are already assigned to OTHER groups
+          const availableLeaders = formattedLeaders.filter(
+            leader => !assignedLeaderIds.includes(leader.id) || leader.id === currentEditingLeaderId
+          );
+          
+          setLeaders(formattedLeaders);
+          setFilteredLeaders(availableLeaders.filter(leader => leader.active !== false));
+        } else {
+          // Filter out leaders that are already assigned to any groups
+          const availableLeaders = formattedLeaders.filter(
+            leader => !assignedLeaderIds.includes(leader.id) && leader.active !== false
+          );
+          
+          setLeaders(formattedLeaders);
+          setFilteredLeaders(availableLeaders);
+        }
       }
     } catch (error) {
       console.error("Erro ao buscar líderes:", error);

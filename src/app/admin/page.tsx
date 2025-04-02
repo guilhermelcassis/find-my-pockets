@@ -389,11 +389,20 @@ const AdminPage = () => {
         // Fetch leaders
         const fetchLeaders = async () => {
             try {
+                // First get all leaders
                 const { data: leadersData, error } = await db
                   .from('leaders')
                   .select('*');
                 
                 if (error) throw error;
+                
+                // Then get all groups to check which leaders are already assigned
+                const { data: groupsData, error: groupsError } = await db
+                  .from('groups')
+                  .select('leader_id')
+                  .eq('active', true);
+                
+                if (groupsError) throw groupsError;
                 
                 if (leadersData && isMounted) {
                     const formattedLeaders = leadersData.map(leader => ({
@@ -405,9 +414,21 @@ const AdminPage = () => {
                         active: leader.active ?? true
                     }));
                     
+                    // Get array of leader_ids that are already assigned to active groups
+                    const assignedLeaderIds = groupsData
+                        .filter(group => group.leader_id)
+                        .map(group => group.leader_id);
+                    
+                    // Filter out leaders that are already assigned to groups
+                    const availableLeaders = formattedLeaders.filter(
+                        leader => !assignedLeaderIds.includes(leader.id) && leader.active !== false
+                    );
+                    
+                    // Save all leaders for reference
                     setLeaders(formattedLeaders);
-                    // Only include active leaders by default in the filtered list
-                    setFilteredLeaders(formattedLeaders.filter(leader => leader.active !== false));
+                    
+                    // Only include active and unassigned leaders in the filtered list
+                    setFilteredLeaders(availableLeaders);
                 }
             } catch (error) {
                 console.error("Erro ao buscar líderes:", error);
