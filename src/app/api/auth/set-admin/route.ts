@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { setUserAsAdmin } from '../../../../lib/firebase-admin';
+import { setUserAsAdmin } from '../../../../lib/supabase-admin';
 
 // WARNING: This endpoint should be secured in production
 // It's primarily for development purposes

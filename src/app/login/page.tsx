@@ -17,7 +17,7 @@ export default function LoginPage() {
     e.preventDefault();
     
     if (!email || !password) {
-      setError('Please enter both email and password');
+      setError('Por favor, informe e-mail e senha');
       return;
     }
     
@@ -30,8 +30,8 @@ export default function LoginPage() {
       // Redirect to admin page on successful login
       router.push('/admin');
     } catch (error) {
-      console.error('Login error:', error);
-      setError('Invalid email or password');
+      console.error('Erro de login:', error);
+      setError('E-mail ou senha inválidos');
     } finally {
       setIsLoading(false);
     }
@@ -43,8 +43,8 @@ export default function LoginPage() {
       await signInWithGoogle();
       router.push('/admin');
     } catch (error) {
-      console.error('Google sign-in error:', error);
-      setError('Error signing in with Google');
+      console.error('Erro de login com Google:', error);
+      setError('Erro ao fazer login com o Google');
     } finally {
       setIsLoading(false);
     }
@@ -54,8 +54,8 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="max-w-md w-full p-6 space-y-8 bg-white rounded-lg shadow-md">
         <div className="text-center">
-          <h1 className="text-2xl font-bold">Admin Login</h1>
-          <p className="mt-2 text-gray-600">Sign in to access the Dunamis Pockets admin panel</p>
+          <h1 className="text-2xl font-bold">Login de Administrador</h1>
+          <p className="mt-2 text-gray-600">Entre para acessar o painel administrativo do Dunamis Pockets</p>
         </div>
         
         {error && (
@@ -66,7 +66,7 @@ export default function LoginPage() {
         
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email</label>
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700">E-mail</label>
             <input
               id="email"
               type="email"
@@ -78,7 +78,7 @@ export default function LoginPage() {
           </div>
           
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700">Password</label>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700">Senha</label>
             <input
               id="password"
               type="password"
@@ -94,7 +94,7 @@ export default function LoginPage() {
             disabled={isLoading}
             className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
           >
-            {isLoading ? 'Signing in...' : 'Sign in'}
+            {isLoading ? 'Entrando...' : 'Entrar'}
           </button>
           
           <div className="relative py-2">
@@ -102,7 +102,7 @@ export default function LoginPage() {
               <div className="w-full border-t border-gray-300"></div>
             </div>
             <div className="relative flex justify-center">
-              <span className="px-2 bg-white text-sm text-gray-500">Or</span>
+              <span className="px-2 bg-white text-sm text-gray-500">Ou</span>
             </div>
           </div>
           
@@ -120,13 +120,13 @@ export default function LoginPage() {
                 <path fill="#EA4335" d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z"/>
               </g>
             </svg>
-            Sign in with Google
+            Entrar com Google
           </button>
         </form>
         
         <div className="text-center text-sm mt-4">
           <Link href="/" className="text-blue-600 hover:text-blue-800">
-            Back to Home
+            Voltar para Página Inicial
           </Link>
         </div>
       </div>

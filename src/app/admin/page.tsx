@@ -1,16 +1,15 @@
 // app/(admin)/page.tsx
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Group } from '../../lib/interfaces';
-import { firestore } from '../../lib/firebase';
-import { collection, addDoc, getDocs } from 'firebase/firestore';
+import { db } from '../../lib/supabase';
 import Link from 'next/link';
 
 // Flag to prevent duplicate Google Maps loading
 declare global {
+  // Tipagem será herdada de src/components/Map.tsx que já tem a tipagem correta
   interface Window {
-    google: any;
     googleMapsLoaded: boolean;
   }
 }
@@ -21,11 +20,12 @@ const AdminPage = () => {
     const [map, setMap] = useState<google.maps.Map | null>(null);
     const [marker, setMarker] = useState<google.maps.Marker | null>(null);
     const [statusMessage, setStatusMessage] = useState<{text: string, type: 'success' | 'error' | 'info'} | null>(null);
-    const [leaders, setLeaders] = useState<{ id: string; name: string; phone: string }[]>([]);
+    const [leaders, setLeaders] = useState<{ id: string; name: string; phone: string; email: string; curso: string }[]>([]);
     const [selectedLeaderId, setSelectedLeaderId] = useState<string>('');
     const [locationSelected, setLocationSelected] = useState<boolean>(false);
     const [isValidatingInstagram, setIsValidatingInstagram] = useState<boolean>(false);
     const [isInstagramValid, setIsInstagramValid] = useState<boolean | null>(null);
+    const [showMap, setShowMap] = useState<boolean>(false);
     
     const [group, setGroup] = useState<Group>({
         id: '',
@@ -38,65 +38,95 @@ const AdminPage = () => {
         instagram: '',
         dayofweek: '',
         time: '',
-        leader: { name: '', phone: '' },
+        tipo: '',
+        local: '',
+        leader: { name: '', phone: '', email: '', curso: '' },
         coordinates: { latitude: 0, longitude: 0 },
-        fullAddress: '',
+        fulladdress: '',
+        zipcode: '',
     });
 
     // Fetch leaders
     useEffect(() => {
         const fetchLeaders = async () => {
             try {
-                const leadersSnapshot = await getDocs(collection(firestore, 'leaders'));
-                const leadersData = leadersSnapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data() as { name: string; phone: string }
-                }));
-                setLeaders(leadersData);
+                const { data: leadersData, error } = await db
+                  .from('leaders')
+                  .select('*');
+                
+                if (error) throw error;
+                
+                if (leadersData) {
+                    setLeaders(leadersData.map(leader => ({
+                        id: leader.id,
+                        name: leader.name,
+                        phone: leader.phone,
+                        email: leader.email || '',
+                        curso: leader.curso || ''
+                    })));
+                }
             } catch (error) {
-                console.error("Error fetching leaders:", error);
+                console.error("Erro ao buscar líderes:", error);
             }
         };
         
         fetchLeaders();
+        // Mostrar mapa após buscar os líderes
+        setShowMap(true);
     }, []);
 
     // Initialize Google Maps
     useEffect(() => {
-        const loadGoogleMaps = () => {
-            // Check if Google Maps is already loaded to prevent multiple loads
-            if (!window.google && !window.googleMapsLoaded) {
-                // Set flag to prevent duplicate loads
-                window.googleMapsLoaded = true;
-                
-                const script = document.createElement('script');
-                // Use the new Places API
-                script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places&v=beta`;
-                script.async = true;
-                script.defer = true;
-                document.head.appendChild(script);
-                
-                script.onload = initMap;
-            } else if (window.google) {
-                initMap();
-            }
-        };
-        
-        loadGoogleMaps();
-        
-        // Cleanup function
-        return () => {
-            // We can't remove the Google script, but we can clean up our components
-            if (map) {
-                setMap(null);
-            }
-            if (marker) {
-                setMarker(null);
-            }
-        };
-    }, []);
+        if (showMap) {
+            const loadGoogleMaps = () => {
+                // Check if Google Maps is already loaded to prevent multiple loads
+                if (!window.google && !window.googleMapsLoaded) {
+                    // Set flag to prevent duplicate loads
+                    window.googleMapsLoaded = true;
+                    
+                    const script = document.createElement('script');
+                    // Use the new Places API
+                    script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places&v=beta`;
+                    script.async = true;
+                    script.defer = true;
+                    document.head.appendChild(script);
+                    
+                    script.onload = initMap;
+                } else if (window.google) {
+                    initMap();
+                }
+            };
+            
+            loadGoogleMaps();
+            
+            // Cleanup function
+            return () => {
+                if (map) {
+                    setMap(null);
+                }
+                if (marker) {
+                    setMarker(null);
+                }
+            };
+        }
+    }, [showMap, map, marker]);
 
-    const initMap = () => {
+    // Função para atualizar coordenadas a partir do marcador
+    const updateCoordinatesFromMarker = (position: google.maps.LatLng) => {
+        const lat = position.lat();
+        const lng = position.lng();
+        
+        setGroup((prev: Group) => ({
+            ...prev,
+            coordinates: {
+                latitude: lat,
+                longitude: lng
+            }
+        }));
+    };
+
+    // Implementação do initMap usando useCallback
+    const initMap = useCallback(() => {
         if (mapRef.current && window.google) {
             // Default to a central position (can be changed)
             const defaultLocation = { lat: -24.65236500245874, lng: -47.87912740708651 };
@@ -149,7 +179,7 @@ const AdminPage = () => {
                 
                 autocomplete.addListener('place_changed', () => {
                     const place = autocomplete.getPlace();
-                    console.log("Selected place:", place); // For debugging
+                    console.log("Local selecionado:", place); // For debugging
                     
                     if (place.geometry && place.geometry.location) {
                         // Update the map
@@ -166,9 +196,9 @@ const AdminPage = () => {
                         let city = '';
                         let state = '';
                         let country = '';
-                        let zipCode = '';
-                        let university = place.name || '';
-                        let fullAddress = place.formatted_address || '';
+                        let zipcode = '';
+                        const university = place.name || '';
+                        const fulladdress = place.formatted_address || '';
                         
                         if (place.address_components) {
                             for (const component of place.address_components) {
@@ -184,7 +214,7 @@ const AdminPage = () => {
                                 } else if (types.includes('country')) {
                                     country = component.long_name;
                                 } else if (types.includes('postal_code')) {
-                                    zipCode = component.long_name;
+                                    zipcode = component.long_name;
                                 }
                             }
                         }
@@ -199,13 +229,13 @@ const AdminPage = () => {
                             }
                         }
                         
-                        console.log("Extracted data:", { 
+                        console.log("Dados extraídos:", { 
                             university, 
                             city, 
                             state, 
                             country, 
-                            zipCode,
-                            fullAddress
+                            zipcode,
+                            fulladdress
                         }); // For debugging
                         
                         // Update form with the extracted data
@@ -216,7 +246,10 @@ const AdminPage = () => {
                             state: state || prev.state,
                             country: country || prev.country,
                             location: university, // Set location as the university name
-                            fullAddress: fullAddress // Add full address
+                            fulladdress: fulladdress, // Add full address
+                            zipcode: zipcode, // Add zipCode
+                            tipo: '',
+                            local: '',
                         }));
                         
                         // Mark that a location has been selected to make fields read-only
@@ -225,21 +258,8 @@ const AdminPage = () => {
                 });
             }
         }
-    };
+    }, [updateCoordinatesFromMarker]);
 
-    const updateCoordinatesFromMarker = (position: google.maps.LatLng) => {
-        const lat = position.lat();
-        const lng = position.lng();
-        
-        setGroup((prev: Group) => ({
-            ...prev,
-            coordinates: {
-                latitude: lat,
-                longitude: lng
-            }
-        }));
-    };
-    
     // Validate Instagram username
     const validateInstagram = async (username: string) => {
         if (!username) {
@@ -266,12 +286,11 @@ const AdminPage = () => {
         
         try {
             // Manual verification by checking if the profile URL exists
-            const profileUrl = `https://www.instagram.com/${cleanUsername}/`;
+            const profileUrl = `https://www.instagram.com/${cleanUsername.replace('@', '')}/?__a=1`;
             
             // Make a request to check if the profile exists
-            const response = await fetch(profileUrl, {
-                method: 'HEAD', // Only request headers, not the full page
-                mode: 'no-cors', // This is needed for cross-origin requests
+            await fetch(profileUrl, {
+                method: 'HEAD'
             });
             
             // If we can access the page without a 404 error, assume the profile exists
@@ -284,7 +303,7 @@ const AdminPage = () => {
             setGroup(prev => ({ ...prev, instagram: formattedUsername }));
             
         } catch (error) {
-            console.error("Error validating Instagram:", error);
+            console.error("Erro ao validar Instagram:", error);
             setIsInstagramValid(false);
         } finally {
             setIsValidatingInstagram(false);
@@ -293,31 +312,72 @@ const AdminPage = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setStatusMessage({ text: 'Saving group...', type: 'info' });
+        setStatusMessage({ text: 'Salvando grupo...', type: 'info' });
         
         try {
             // Find the selected leader
             const selectedLeader = leaders.find(leader => leader.id === selectedLeaderId);
             
             if (!selectedLeader) {
-                throw new Error("Please select a leader");
+                throw new Error("Por favor, selecione um líder");
             }
             
-            // Make sure name field exists even if empty
+            // Validate required fields
+            if (!group.university) {
+                throw new Error("Por favor, selecione uma universidade pesquisando e clicando no mapa");
+            }
+            
+            if (!group.dayofweek) {
+                throw new Error("Por favor, selecione um dia da semana");
+            }
+            
+            if (!group.time) {
+                throw new Error("Por favor, informe um horário");
+            }
+            
+            // Prepare the data with all required fields
+            // IMPORTANT: Case sensitivity matters for Supabase column names
             const groupToSave = {
-                ...group,
                 name: group.name || 'Dunamis Pocket',
+                university: group.university,
+                city: group.city,
+                state: group.state,
+                country: group.country,
+                location: group.location,
+                instagram: group.instagram || '',
+                dayofweek: group.dayofweek,
+                time: group.time,
+                tipo: group.tipo || 'Publica',
+                local: group.local || '',
+                // Use lowercase to match database column names
+                fulladdress: group.fulladdress || '',  // Changed from fulladdress to fulladdress
+                zipcode: group.zipcode || '',          // Changed from zipCode to zipcode
                 leader: {
                     name: selectedLeader.name,
-                    phone: selectedLeader.phone
-                }
+                    phone: selectedLeader.phone,
+                    email: selectedLeader.email || '',
+                    curso: selectedLeader.curso || ''
+                },
+                coordinates: group.coordinates,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
             };
             
-            // Add group to Firestore using Firebase v9 modular syntax
-            const docRef = await addDoc(collection(firestore, 'groups'), groupToSave);
-            console.log("Group added with ID: ", docRef.id);
+            console.log("Salvando dados do grupo:", groupToSave);
             
-            setStatusMessage({ text: `Success! Group added with ID: ${docRef.id}`, type: 'success' });
+            // Add group to Supabase
+            const { data: insertedGroup, error } = await db
+                .from('groups')
+                .insert([groupToSave])
+                .select()
+                .single();
+                
+            if (error) {
+                console.error("Erro do Supabase:", error);
+                throw new Error(error.message || 'Erro ao salvar grupo');
+            }
+            
+            setStatusMessage({ text: `Sucesso! Grupo adicionado com ID: ${insertedGroup.id}`, type: 'success' });
             
             // Reset form
             setGroup({ 
@@ -331,9 +391,12 @@ const AdminPage = () => {
                 instagram: '',
                 dayofweek: '',
                 time: '',
-                leader: { name: '', phone: '' },
+                tipo: 'Publica',
+                local: '',
+                leader: { name: '', phone: '', email: '', curso: '' },
                 coordinates: { latitude: -24.65236500245874, longitude: -47.87912740708651 },
-                fullAddress: '',
+                fulladdress: '',
+                zipcode: '',
             });
             
             setSelectedLeaderId('');
@@ -353,21 +416,25 @@ const AdminPage = () => {
                 autocompleteInputRef.current.value = '';
             }
         } catch (error) {
-            console.error("Error adding group: ", error);
-            setStatusMessage({ text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`, type: 'error' });
+            console.error("Erro ao adicionar grupo: ", error);
+            let errorMessage = 'Erro desconhecido';
+            if (error instanceof Error) {
+                errorMessage = error.message;
+            }
+            setStatusMessage({ text: `Erro: ${errorMessage}`, type: 'error' });
         }
     };
 
     return (
         <div className="container mx-auto p-4">
             <div className="flex justify-between items-center mb-4">
-                <h1 className="text-2xl font-bold">Add Dunamis Pockets</h1>
+                <h1 className="text-2xl font-bold">Adicionar Pockets Dunamis</h1>
                 <div>
                     <Link href="/admin/groups" className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded mr-2">
-                        View All Groups
+                        Ver Todos os Grupos
                     </Link>
                     <Link href="/admin/leaders" className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded">
-                        Manage Leaders
+                        Gerenciar Líderes
                     </Link>
                 </div>
             </div>
@@ -383,12 +450,12 @@ const AdminPage = () => {
             )}
             
             <div className="mb-6">
-                <label className="block mb-1">Search University</label>
+                <label className="block mb-1">Buscar Universidade</label>
                 <input 
                     ref={autocompleteInputRef}
                     type="text" 
                     className="w-full border p-2 rounded" 
-                    placeholder="Search for university" 
+                    placeholder="Pesquisar por universidade" 
                     disabled={locationSelected}
                 />
                 {locationSelected && (
@@ -396,59 +463,66 @@ const AdminPage = () => {
                         className="mt-2 bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded text-sm"
                         onClick={() => setLocationSelected(false)}
                     >
-                        Change Location
+                        Alterar Localização
                     </button>
                 )}
             </div>
             
             <div className="mb-6">
                 <div ref={mapRef} className="w-full h-[400px] border rounded"></div>
-                <p className="text-sm text-gray-600 mt-2">Click on the map or drag the marker to set the exact location.</p>
+                <p className="text-sm text-gray-600 mt-2">Clique no mapa ou arraste o marcador para definir a localização exata.</p>
             </div>
             
             <form onSubmit={handleSubmit} className="space-y-4">               
                 {/* Location Details - Display as read-only information cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded border">
-                    <h2 className="font-semibold col-span-full">Location Details</h2>
+                    <h2 className="font-semibold col-span-full">Detalhes da Localização</h2>
                     
                     {/* University */}
                     <div className="bg-white p-3 rounded shadow-sm">
-                        <h3 className="text-sm text-gray-500">University</h3>
-                        <p className="font-medium">{group.university || 'Not selected'}</p>
+                        <h3 className="text-sm text-gray-500">Universidade</h3>
+                        <p className="font-medium">{group.university || 'Não selecionada'}</p>
                     </div>
                     
                     {/* City */}
                     <div className="bg-white p-3 rounded shadow-sm">
-                        <h3 className="text-sm text-gray-500">City</h3>
-                        <p className="font-medium">{group.city || 'Not selected'}</p>
+                        <h3 className="text-sm text-gray-500">Cidade</h3>
+                        <p className="font-medium">{group.city || 'Não selecionada'}</p>
                     </div>
                     
                     {/* State/Province */}
                     <div className="bg-white p-3 rounded shadow-sm">
-                        <h3 className="text-sm text-gray-500">State/Province</h3>
-                        <p className="font-medium">{group.state || 'Not selected'}</p>
+                        <h3 className="text-sm text-gray-500">Estado/Província</h3>
+                        <p className="font-medium">{group.state || 'Não selecionado'}</p>
                     </div>
                     
                     {/* Country */}
                     <div className="bg-white p-3 rounded shadow-sm">
-                        <h3 className="text-sm text-gray-500">Country</h3>
-                        <p className="font-medium">{group.country || 'Not selected'}</p>
+                        <h3 className="text-sm text-gray-500">País</h3>
+                        <p className="font-medium">{group.country || 'Não selecionado'}</p>
                     </div>
                     
                     {/* Full Address */}
                     <div className="bg-white p-3 rounded shadow-sm col-span-full">
-                        <h3 className="text-sm text-gray-500">Full Address</h3>
-                        <p className="font-medium text-sm mt-1">{group.fullAddress || 'Not available'}</p>
+                        <h3 className="text-sm text-gray-500">Endereço Completo</h3>
+                        <p className="font-medium text-sm mt-1">{group.fulladdress || 'Não disponível'}</p>
                     </div>
+                    
+                    {group.zipcode && (
+                        <div className="bg-white p-3 rounded shadow-sm">
+                            <h3 className="text-sm text-gray-500">CEP/Código Postal</h3>
+                            <p className="font-medium">{group.zipcode}</p>
+                        </div>
+                    )}
                     
                     {/* Location */}
                     <div className="bg-white p-3 rounded shadow-sm col-span-full">
-                        <h3 className="text-sm text-gray-500">Specific Location</h3>
+                        <h3 className="text-sm text-gray-500">Localização Específica</h3>
                         <input 
                             type="text" 
                             value={group.location}
                             className="w-full border p-2 rounded mt-1" 
-                            placeholder="Specific location on campus" 
+                            placeholder="Localização específica no campus" 
                             onChange={(e) => setGroup({ ...group, location: e.target.value })} 
                             required 
                         />
@@ -457,30 +531,30 @@ const AdminPage = () => {
 
                 {/* Group Meeting Details */}
                 <div className="bg-gray-50 p-4 rounded border">
-                    <h2 className="font-semibold mb-3">Meeting Details</h2>
+                    <h2 className="font-semibold mb-3">Detalhes do Encontro</h2>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label className="block mb-1">Day of Week</label>
+                            <label className="block mb-1">Dia da Semana</label>
                             <select
                                 value={group.dayofweek}
                                 className="w-full border p-2 rounded" 
                                 onChange={(e) => setGroup({ ...group, dayofweek: e.target.value })} 
                                 required 
                             >
-                                <option value="">Select a day</option>
-                                <option value="Monday">Monday</option>
-                                <option value="Tuesday">Tuesday</option>
-                                <option value="Wednesday">Wednesday</option>
-                                <option value="Thursday">Thursday</option>
-                                <option value="Friday">Friday</option>
-                                <option value="Saturday">Saturday</option>
-                                <option value="Sunday">Sunday</option>
+                                <option value="">Selecione um dia</option>
+                                <option value="Segunda-feira">Segunda-feira</option>
+                                <option value="Terça-feira">Terça-feira</option>
+                                <option value="Quarta-feira">Quarta-feira</option>
+                                <option value="Quinta-feira">Quinta-feira</option>
+                                <option value="Sexta-feira">Sexta-feira</option>
+                                <option value="Sábado">Sábado</option>
+                                <option value="Domingo">Domingo</option>
                             </select>
                         </div>
 
                         <div>
-                            <label className="block mb-1">Time</label>
+                            <label className="block mb-1">Horário</label>
                             <input 
                                 type="time" 
                                 value={group.time}
@@ -489,12 +563,38 @@ const AdminPage = () => {
                                 required 
                             />
                         </div>
+
+                        {/* Type (Tipo) field */}
+                        <div>
+                            <label className="block mb-1">Tipo</label>
+                            <select
+                                value={group.tipo || 'Publica'}
+                                className="w-full border p-2 rounded" 
+                                onChange={(e) => setGroup({ ...group, tipo: e.target.value })} 
+                                required 
+                            >
+                                <option value="Publica">Pública</option>
+                                <option value="Privada">Privada</option>
+                            </select>
+                        </div>
+                        
+                        {/* Local field */}
+                        <div>
+                            <label className="block mb-1">Local</label>
+                            <input 
+                                type="text" 
+                                value={group.local || ''}
+                                className="w-full border p-2 rounded" 
+                                placeholder="Informação adicional de local" 
+                                onChange={(e) => setGroup({ ...group, local: e.target.value })} 
+                            />
+                        </div>
                     </div>
                 </div>
 
                 {/* Social Media & Contact */}
                 <div className="bg-gray-50 p-4 rounded border">
-                    <h2 className="font-semibold mb-3">Contact Information</h2>
+                    <h2 className="font-semibold mb-3">Informações de Contato</h2>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
@@ -507,7 +607,7 @@ const AdminPage = () => {
                                         isInstagramValid === true ? 'border-green-500' : 
                                         isInstagramValid === false ? 'border-red-500' : ''
                                     }`} 
-                                    placeholder="@username" 
+                                    placeholder="@usuário" 
                                     onChange={(e) => {
                                         setGroup({ ...group, instagram: e.target.value });
                                         // Don't validate on every keystroke to avoid excessive requests
@@ -519,41 +619,41 @@ const AdminPage = () => {
                                 />
                                 <span className="absolute left-2 top-2.5 text-gray-500">@</span>
                                 {isValidatingInstagram && (
-                                    <span className="absolute right-2 top-2.5 text-blue-500">Checking...</span>
+                                    <span className="absolute right-2 top-2.5 text-blue-500">Verificando...</span>
                                 )}
                                 {isInstagramValid === true && !isValidatingInstagram && (
-                                    <span className="absolute right-2 top-2.5 text-green-500">✓ Valid</span>
+                                    <span className="absolute right-2 top-2.5 text-green-500">✓ Válido</span>
                                 )}
                                 {isInstagramValid === false && !isValidatingInstagram && (
-                                    <span className="absolute right-2 top-2.5 text-red-500">Invalid</span>
+                                    <span className="absolute right-2 top-2.5 text-red-500">Inválido</span>
                                 )}
                             </div>
                             <div className="flex items-center justify-between mt-1">
-                                <p className="text-xs text-gray-500">Enter a valid Instagram username</p>
+                                <p className="text-xs text-gray-500">Informe um nome de usuário válido do Instagram</p>
                                 <button 
                                     type="button"
                                     className="text-xs text-blue-500 hover:text-blue-700"
                                     onClick={() => validateInstagram(group.instagram)}
                                     disabled={isValidatingInstagram || !group.instagram}
                                 >
-                                    Verify Profile
+                                    Verificar Perfil
                                 </button>
                             </div>
-                            <p className="text-xs text-gray-500 mt-1 italic">We check if the Instagram profile actually exists.</p>
+                            <p className="text-xs text-gray-500 mt-1 italic">Verificamos se o perfil do Instagram realmente existe.</p>
                         </div>
 
                         <div>
-                            <label className="block mb-1">Leader</label>
+                            <label className="block mb-1">Líder</label>
                             <select
                                 value={selectedLeaderId}
                                 className="w-full border p-2 rounded"
                                 onChange={(e) => setSelectedLeaderId(e.target.value)}
                                 required
                             >
-                                <option value="">Select a leader</option>
+                                <option value="">Selecione um líder</option>
                                 {leaders.map(leader => (
                                     <option key={leader.id} value={leader.id}>
-                                        {leader.name} ({leader.phone})
+                                        {leader.name} ({leader.phone}) - {leader.curso ? leader.curso : 'Sem Curso'}
                                     </option>
                                 ))}
                             </select>
@@ -565,7 +665,7 @@ const AdminPage = () => {
                     type="submit" 
                     className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded w-full md:w-auto"
                 >
-                    Add Group
+                    Adicionar Grupo
                 </button>
             </form>
         </div>

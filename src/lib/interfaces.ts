@@ -6,6 +6,8 @@ export interface Coordinates {
 export interface Leader {
   name: string;
   phone: string;
+  email: string;
+  curso: string;
 }
 
 export interface Group {
@@ -21,6 +23,8 @@ export interface Group {
   time: string;
   leader: Leader;
   coordinates: Coordinates;
-  fullAddress?: string; // Optional full address from Google Places
-  zipCode?: string; // Optional zip code from Google Places
+  tipo?: string; // Public or Private (Publica ou Privada)
+  local?: string; // Additional location information
+  fulladdress?: string; // Optional full address from Google Places (keep camelCase for UI)
+  zipcode?: string; // Optional zip code from Google Places (keep camelCase for UI)
 } 

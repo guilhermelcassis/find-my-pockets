@@ -12,13 +12,13 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
   
-  // Check for Firebase auth cookie
+  // Check for Supabase auth cookie
   // Note: This is a simple check and doesn't validate the token
   // Full validation happens in the client components
-  const authCookie = request.cookies.get('FirebaseAuth');
+  const authCookie = request.cookies.get('SupabaseAuth');
   
   if (authCookie) {
-    // If there's a Firebase auth cookie, redirect to admin
+    // If there's a Supabase auth cookie, redirect to admin
     return NextResponse.redirect(new URL('/admin', request.url));
   }
   

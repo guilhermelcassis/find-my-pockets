@@ -1,10 +1,9 @@
+'use client';
 // app/(public)/page.tsx
 import { useState } from 'react';
-import { Group } from '../../lib/interfaces'; // Assuming you create this interface
 
 const LandingPage = () => {
     const [university, setUniversity] = useState<string>('');
-    const [groups, setGroups] = useState<Group[]>([]);
 
     const handleSearch = async () => {
         // Fetch groups from Firestore based on the university name

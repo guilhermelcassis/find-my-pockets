@@ -9,7 +9,7 @@ export default function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, loading, logOut, refreshToken } = useAuth();
+  const { user, session, loading, logOut, refreshToken } = useAuth();
   const router = useRouter();
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
@@ -23,21 +23,18 @@ export default function AdminLayout({
 
     // Check if the user is an admin
     const checkAdminStatus = async () => {
-      if (user) {
+      if (user && session) {
         try {
           // Force token refresh to get the latest claims
-          await refreshToken();
+          const accessToken = await refreshToken() || session.access_token;
           
-          // Get the ID token
-          const idToken = await user.getIdToken();
-          
-          // Verify admin status using Firebase Admin SDK via an API endpoint
+          // Verify admin status using Supabase Admin API via an API endpoint
           const response = await fetch('/api/auth/verify-admin', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ idToken }),
+            body: JSON.stringify({ accessToken }),
           });
           
           const data = await response.json();
@@ -62,7 +59,7 @@ export default function AdminLayout({
     if (user && isAdmin === null) {
       checkAdminStatus();
     }
-  }, [user, loading, router, isAdmin, refreshToken]);
+  }, [user, session, loading, router, isAdmin, refreshToken]);
 
   if (loading || !user || isAdmin === null) {
     return (

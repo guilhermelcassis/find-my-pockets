@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+.env.local
 
 # vercel
 .vercel
@@ -43,3 +44,8 @@ next-env.d.ts
 .cursor/
 
 serviceAccountKey.json
+
+leaders.txt
+lideres.xlsx
+universities.xlsx
+MIGRATION-FIREBASE-TO-SUPABASE.md

@@ -1,25 +1,16 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { 
-  User, 
-  onAuthStateChanged, 
-  signInWithEmailAndPassword, 
-  signOut, 
-  GoogleAuthProvider, 
-  signInWithPopup,
-  setPersistence,
-  browserLocalPersistence,
-  getIdToken
-} from 'firebase/auth';
-import { auth } from './firebase';
+import { User, Session } from '@supabase/supabase-js';
+import { supabase } from './supabase';
 
 // Define the auth context type
 interface AuthContextType {
   user: User | null;
+  session: Session | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<User>;
-  signInWithGoogle: () => Promise<User>;
+  signInWithGoogle: () => Promise<void>;
   logOut: () => Promise<void>;
   refreshToken: () => Promise<string | null>;
 }
@@ -39,49 +30,65 @@ export const useAuth = () => {
 // Auth provider component
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-
-  // Set persistence on mount
-  useEffect(() => {
-    setPersistence(auth, browserLocalPersistence).catch(error => {
-      console.error("Error setting auth persistence:", error);
-    });
-  }, []);
 
   // Listen for auth state changes
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setUser(user);
-      
-      // If user is logged in, get the ID token and set a cookie
-      // This is used by the middleware for simple auth checks
-      if (user) {
-        try {
-          const token = await getIdToken(user, true);
-          
-          // Set a cookie with the Firebase token
-          // This is just for middleware to detect auth state
-          // Not used for actual auth which happens client-side
-          document.cookie = `FirebaseAuth=${token}; path=/; max-age=3600; SameSite=Strict`;
-        } catch (error) {
-          console.error("Error getting ID token:", error);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event: string, currentSession: Session | null) => {
+        setSession(currentSession);
+        setUser(currentSession?.user || null);
+        
+        // If user is logged in, set a cookie for the middleware
+        if (currentSession) {
+          try {
+            const token = currentSession.access_token;
+            
+            // Set a cookie with the Supabase token
+            // This is just for middleware to detect auth state
+            document.cookie = `SupabaseAuth=${token}; path=/; max-age=3600; SameSite=Strict`;
+          } catch (error) {
+            console.error("Error handling session:", error);
+          }
+        } else {
+          // Clear the auth cookie when signed out
+          document.cookie = 'SupabaseAuth=; path=/; max-age=0; SameSite=Strict';
         }
-      } else {
-        // Clear the auth cookie when signed out
-        document.cookie = 'FirebaseAuth=; path=/; max-age=0; SameSite=Strict';
+        
+        setLoading(false);
       }
-      
-      setLoading(false);
-    });
+    );
 
-    return () => unsubscribe();
+    // Initial session check
+    const initializeAuth = async () => {
+      const { data: { session: initialSession } } = await supabase.auth.getSession();
+      if (initialSession) {
+        setSession(initialSession);
+        setUser(initialSession.user);
+        document.cookie = `SupabaseAuth=${initialSession.access_token}; path=/; max-age=3600; SameSite=Strict`;
+      }
+      setLoading(false);
+    };
+
+    initializeAuth();
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Sign in with email and password
   const signIn = async (email: string, password: string) => {
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      return userCredential.user;
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      
+      if (error) throw error;
+      
+      return data.user;
     } catch (error) {
       console.error("Error signing in with email and password:", error);
       throw error;
@@ -91,9 +98,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Sign in with Google
   const signInWithGoogle = async () => {
     try {
-      const provider = new GoogleAuthProvider();
-      const userCredential = await signInWithPopup(auth, provider);
-      return userCredential.user;
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+      
+      if (error) throw error;
     } catch (error) {
       console.error("Error signing in with Google:", error);
       throw error;
@@ -102,15 +114,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Force token refresh to get latest claims
   const refreshToken = async () => {
-    if (user) {
+    if (session) {
       try {
-        // This forces a token refresh
-        const newToken = await getIdToken(user, true);
+        const { data, error } = await supabase.auth.refreshSession();
         
-        // Update cookie with new token
-        document.cookie = `FirebaseAuth=${newToken}; path=/; max-age=3600; SameSite=Strict`;
+        if (error) throw error;
         
-        return newToken;
+        if (data.session) {
+          // Update cookie with new token
+          document.cookie = `SupabaseAuth=${data.session.access_token}; path=/; max-age=3600; SameSite=Strict`;
+          
+          return data.session.access_token;
+        }
       } catch (error) {
         console.error("Error refreshing token:", error);
       }
@@ -121,9 +136,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Sign out
   const logOut = async () => {
     try {
-      await signOut(auth);
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      
       // Clear the cookie
-      document.cookie = 'FirebaseAuth=; path=/; max-age=0; SameSite=Strict';
+      document.cookie = 'SupabaseAuth=; path=/; max-age=0; SameSite=Strict';
     } catch (error) {
       console.error("Error signing out:", error);
       throw error;
@@ -132,6 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = {
     user,
+    session,
     loading,
     signIn,
     signInWithGoogle,
