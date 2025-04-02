@@ -5,13 +5,172 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Group } from '../../lib/interfaces';
 import { db } from '../../lib/supabase';
 import Link from 'next/link';
+import Script from 'next/script';
 
 // Flag to prevent duplicate Google Maps loading
 declare global {
   // Tipagem será herdada de src/components/Map.tsx que já tem a tipagem correta
   interface Window {
     googleMapsLoaded: boolean;
+    // Add the guard properties
+    __GOOGLE_MAPS_INIT_GUARD?: {
+      initialized: boolean;
+      loading: boolean;
+      callbacks: Array<() => void>;
+    };
+    initializeGoogleMapsGuarded?: () => void;
+    // Add admin-specific callback
+    initializeAdminMap?: () => void;
+    // Add admin-specific state tracker
+    __ADMIN_MAP_INITIALIZED?: boolean;
+    // Add autocomplete tracker
+    __AUTOCOMPLETE_INITIALIZED?: boolean;
+    // Add new callback for direct initialization
+    initGoogleMaps?: () => void;
   }
+}
+
+// Global initialization tracker - prevents multiple initializations across renders
+if (typeof window !== 'undefined') {
+  window.__ADMIN_MAP_INITIALIZED = window.__ADMIN_MAP_INITIALIZED || false;
+  window.__AUTOCOMPLETE_INITIALIZED = window.__AUTOCOMPLETE_INITIALIZED || false;
+}
+
+// Create a separate Map component to isolate Google Maps from the main component
+// This helps prevent DOM conflicts
+function AdminMapComponent({ 
+  onMapReady, 
+  onMarkerPositionChange,
+  initialCoordinates
+}: { 
+  onMapReady: (map: google.maps.Map, marker: google.maps.Marker) => void;
+  onMarkerPositionChange: (lat: number, lng: number) => void;
+  initialCoordinates: { latitude: number; longitude: number };
+}) {
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const [mapLoaded, setMapLoaded] = useState(false);
+  
+  // Initialize map in its own contained component
+  useEffect(() => {
+    // Prevent running if container not available or window not defined
+    if (!mapContainerRef.current || typeof window === 'undefined') return;
+    
+    // Skip if Google Maps API not loaded yet
+    if (!window.google?.maps) {
+      console.log("Google Maps API not loaded yet in map component");
+      return;
+    }
+    
+    let mapInstance: google.maps.Map | null = null;
+    let markerInstance: google.maps.Marker | null = null;
+    
+    try {
+      console.log("Initializing isolated map component");
+      
+      // Get container dimensions for debugging
+      const container = mapContainerRef.current;
+      console.log("Map container dimensions:", {
+        width: container.clientWidth,
+        height: container.clientHeight
+      });
+      
+      // Create map instance
+      mapInstance = new window.google.maps.Map(container, {
+        center: { 
+          lat: initialCoordinates.latitude || -8.017558, 
+          lng: initialCoordinates.longitude || -34.949283 
+        },
+        zoom: 14,
+        mapTypeControl: true,
+        fullscreenControl: true,
+        streetViewControl: false,
+        zoomControl: true,
+        gestureHandling: 'cooperative',
+        clickableIcons: false,
+      });
+      
+      // Create marker
+      markerInstance = new window.google.maps.Marker({
+        position: { 
+          lat: initialCoordinates.latitude || -8.017558, 
+          lng: initialCoordinates.longitude || -34.949283 
+        },
+        map: mapInstance,
+        draggable: true,
+        title: "Arraste para a localização exata"
+      });
+      
+      // Add click listener to map
+      mapInstance.addListener('click', (e: google.maps.MapMouseEvent) => {
+        if (e.latLng && markerInstance) {
+          const lat = e.latLng.lat();
+          const lng = e.latLng.lng();
+          
+          markerInstance.setPosition(e.latLng);
+          onMarkerPositionChange(lat, lng);
+        }
+      });
+      
+      // Add drag end listener to marker
+      markerInstance.addListener('dragend', () => {
+        if (markerInstance) {
+          const position = markerInstance.getPosition();
+          if (position) {
+            onMarkerPositionChange(position.lat(), position.lng());
+          }
+        }
+      });
+      
+      // Notify parent component that map is ready
+      setMapLoaded(true);
+      onMapReady(mapInstance, markerInstance);
+      
+    } catch (error) {
+      console.error("Error initializing map component:", error);
+    }
+    
+    // Clean up resources when component unmounts
+    return () => {
+      console.log("Cleaning up isolated map component");
+      
+      if (mapInstance) {
+        // Remove all event listeners (not strictly necessary but good practice)
+        google.maps.event.clearInstanceListeners(mapInstance);
+      }
+      
+      if (markerInstance) {
+        // Remove marker from map
+        markerInstance.setMap(null);
+        google.maps.event.clearInstanceListeners(markerInstance);
+      }
+      
+      // Don't try to clean up the map container, let React handle it
+    };
+  }, [initialCoordinates, onMapReady, onMarkerPositionChange]);
+  
+  return (
+    <div className="map-container-wrapper relative">
+      <div 
+        ref={mapContainerRef} 
+        className="w-full h-[400px] border rounded map-container"
+        style={{ 
+          height: "400px", 
+          width: "100%",
+          position: "relative",  
+          background: "#f1f3f4"
+        }}
+      />
+      
+      {/* Show loading animation if map is not loaded yet */}
+      {!mapLoaded && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-white bg-opacity-90 z-10 transition-opacity duration-300">
+          <div className="w-14 h-14 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+          <p className="text-gray-700 font-medium">Carregando mapa...</p>
+          <p className="text-sm text-gray-500 mt-1">O mapa está sendo inicializado</p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 const AdminPage = () => {
@@ -26,6 +185,16 @@ const AdminPage = () => {
     const [isValidatingInstagram, setIsValidatingInstagram] = useState<boolean>(false);
     const [isInstagramValid, setIsInstagramValid] = useState<boolean | null>(null);
     const [showMap, setShowMap] = useState<boolean>(false);
+    const [mapsApiLoaded, setMapsApiLoaded] = useState<boolean>(false);
+    const [autocompleteInitialized, setAutocompleteInitialized] = useState<boolean>(false);
+    
+    // Track initialization state to prevent double initialization
+    const googleMapsLoadingRef = useRef<boolean>(false);
+    const mapInitializedRef = useRef<boolean>(false);
+    const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const mapDebounceRef = useRef<NodeJS.Timeout | null>(null);
+    const effectRunRef = useRef<boolean>(false);
+    const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
     
     const [group, setGroup] = useState<Group>({
         id: '',
@@ -46,61 +215,21 @@ const AdminPage = () => {
         zipcode: '',
     });
 
-    // Implementação do initMap usando useCallback
-    const initMap = useCallback(() => {
-        if (mapRef.current && window.google) {
-            // Define the updateCoordinatesFromMarker function inside the callback
-            const updateCoordinatesFromMarker = (position: google.maps.LatLng) => {
-                const lat = position.lat();
-                const lng = position.lng();
-                
-                setGroup((prev: Group) => ({
-                    ...prev,
-                    coordinates: {
-                        latitude: lat,
-                        longitude: lng
-                    }
-                }));
-            };
+    // Separate function to initialize just the autocomplete - can be called independently
+    const initAutocomplete = useCallback(() => {
+        if (typeof window === 'undefined' || !window.google?.maps?.places || !autocompleteInputRef.current) {
+            console.log("Unable to initialize autocomplete - Google Places API or input not available");
+            return;
+        }
+        
+        if (window.__AUTOCOMPLETE_INITIALIZED || autocompleteRef.current) {
+            console.log("Autocomplete already initialized, skipping");
+            return;
+        }
+        
+        try {
+            console.log("Initializing Google Places autocomplete...");
             
-            // Default to a central position (can be changed)
-            const defaultLocation = { lat: -24.65236500245874, lng: -47.87912740708651 };
-            
-            const newMap = new window.google.maps.Map(mapRef.current, {
-                center: defaultLocation,
-                zoom: 7,
-                mapTypeControl: true,
-            });
-            
-            setMap(newMap);
-            
-            // Initialize the marker
-            const newMarker = new window.google.maps.Marker({
-                position: defaultLocation,
-                map: newMap,
-                draggable: true,
-            });
-            
-            setMarker(newMarker);
-            
-            // Add click listener to the map
-            newMap.addListener('click', (e: google.maps.MapMouseEvent) => {
-                if (e.latLng) {
-                    newMarker.setPosition(e.latLng);
-                    updateCoordinatesFromMarker(e.latLng);
-                }
-            });
-            
-            // Add drag end listener to the marker
-            newMarker.addListener('dragend', () => {
-                const position = newMarker.getPosition();
-                if (position) {
-                    updateCoordinatesFromMarker(position);
-                }
-            });
-            
-            // Initialize Places Autocomplete with the new API
-            if (autocompleteInputRef.current) {
                 // Create autocomplete with university bias
                 const autocompleteOptions = {
                     types: ['university', 'school'],
@@ -112,20 +241,45 @@ const AdminPage = () => {
                     autocompleteOptions
                 );
                 
+            autocompleteRef.current = autocomplete;
+            window.__AUTOCOMPLETE_INITIALIZED = true;
+            setAutocompleteInitialized(true);
+            
+            // Add place_changed event listener
                 autocomplete.addListener('place_changed', () => {
                     const place = autocomplete.getPlace();
-                    console.log("Local selecionado:", place); // For debugging
+                console.log("University selected:", place);
+                
+                if (!place.geometry || !place.geometry.location) {
+                    console.error("No geometry information available for this place");
+                    return;
+                }
+                
+                // Get the coordinates of the selected place
+                const lat = place.geometry.location.lat();
+                const lng = place.geometry.location.lng();
+                console.log(`Selected place coordinates: lat=${lat}, lng=${lng}`);
+                
+                // Update the map if it exists - ensure proper zoom and center
+                if (map) {
+                    console.log("Centering map on selected place");
+                    map.setCenter(place.geometry.location);
+                    map.setZoom(14); // Closer zoom to see the university clearly
+                }
+                
+                // Update the marker if it exists
+                if (marker) {
+                    console.log("Moving marker to selected place");
+                    marker.setPosition(place.geometry.location);
+                    marker.setVisible(true); // Make sure marker is visible
                     
-                    if (place.geometry && place.geometry.location) {
-                        // Update the map
-                        newMap.setCenter(place.geometry.location);
-                        newMap.setZoom(14);
-                        
-                        // Update the marker
-                        newMarker.setPosition(place.geometry.location);
-                        
-                        // Update coordinates
-                        updateCoordinatesFromMarker(place.geometry.location);
+                    // Add animation to make the marker more noticeable
+                    if (window.google?.maps?.Animation) {
+                        marker.setAnimation(window.google.maps.Animation.DROP);
+                    }
+                } else {
+                    console.warn("Marker not available to update");
+                }
                         
                         // Extract address components
                         let city = '';
@@ -164,76 +318,75 @@ const AdminPage = () => {
                             }
                         }
                         
-                        console.log("Dados extraídos:", { 
+                console.log("Extracted data:", { 
                             university, 
                             city, 
                             state, 
                             country, 
                             zipcode,
                             fulladdress
-                        }); // For debugging
+                });
                         
-                        // Update form with the extracted data
-                        setGroup((prev: Group) => ({
+                // Update form with all extracted data, but leave location field empty for admin to fill
+                setGroup(prev => ({
                             ...prev,
                             university: university,
                             city: city || prev.city,
                             state: state || prev.state,
                             country: country || prev.country,
-                            location: university, // Set location as the university name
-                            fulladdress: fulladdress, // Add full address
-                            zipcode: zipcode, // Add zipCode
-                            tipo: '',
-                            local: '',
-                        }));
-                        
-                        // Mark that a location has been selected to make fields read-only
-                        setLocationSelected(true);
+                    location: '', // Leave blank for admin to fill
+                    fulladdress: fulladdress,
+                    zipcode: zipcode,
+                    coordinates: {
+                        latitude: lat,
+                        longitude: lng
                     }
-                });
+                }));
+                
+                // Mark that a location has been selected
+                setLocationSelected(true);
+            });
+            
+            console.log("Google Places autocomplete initialized successfully");
+        } catch (error) {
+            console.error("Error initializing Places autocomplete:", error);
+        }
+    }, [map, marker, setGroup, setLocationSelected]);
+
+    // Function to handle when Google Maps API is loaded
+    const handleGoogleMapsLoaded = useCallback(() => {
+        console.log("Google Maps API loaded successfully");
+        googleMapsLoadingRef.current = false;
+        setMapsApiLoaded(true);
+        
+        // Initialize autocomplete after maps loaded
+        if (autocompleteInputRef.current && !window.__AUTOCOMPLETE_INITIALIZED) {
+            setTimeout(() => {
+                initAutocomplete();
+            }, 100);
+        }
+    }, [initAutocomplete]);
+    
+    // Set up the callback for Google Maps script
+    useEffect(() => {
+        if (typeof window !== 'undefined' && !window.initGoogleMaps) {
+            window.initGoogleMaps = handleGoogleMapsLoaded;
+        }
+        
+        // Clean up the callback when component unmounts
+        return () => {
+            if (typeof window !== 'undefined') {
+                // @ts-ignore - we're intentionally removing it
+                window.initGoogleMaps = undefined;
             }
-        }
-    }, [setGroup, setMap, setMarker, setLocationSelected]);
-
-    // Update useEffect to include initMap in the dependency array
+        };
+    }, [handleGoogleMapsLoaded]);
+    
+    // Load Google Maps API and fetch leaders on component mount
     useEffect(() => {
-        if (showMap) {
-            const loadGoogleMaps = () => {
-                // Check if Google Maps is already loaded
-                if (!window.google && !window.googleMapsLoaded) {
-                    // Set flag to prevent duplicate loads
-                    window.googleMapsLoaded = true;
-                    
-                    const script = document.createElement('script');
-                    // Use the new Places API
-                    script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places&v=beta`;
-                    script.async = true;
-                    script.defer = true;
-                    document.head.appendChild(script);
-                    
-                    script.onload = initMap;
-                } else if (window.google) {
-                    initMap();
-                }
-            };
-            
-            loadGoogleMaps();
-            
-            // Cleanup function
-            return () => {
-                if (map) {
-                    // Google Maps doesn't have unbindAll method
-                    setMap(null);
-                }
-                if (marker) {
-                    marker.setMap(null);
-                }
-            };
-        }
-    }, [showMap, map, marker, initMap]);
-
-    // Fetch leaders
-    useEffect(() => {
+        let isMounted = true;
+        
+        // Fetch leaders
         const fetchLeaders = async () => {
             try {
                 const { data: leadersData, error } = await db
@@ -242,7 +395,7 @@ const AdminPage = () => {
                 
                 if (error) throw error;
                 
-                if (leadersData) {
+                if (leadersData && isMounted) {
                     setLeaders(leadersData.map(leader => ({
                         id: leader.id,
                         name: leader.name,
@@ -257,8 +410,34 @@ const AdminPage = () => {
         };
         
         fetchLeaders();
-        // Mostrar mapa após buscar os líderes
-        setShowMap(true);
+        
+        // Check if Google Maps is already loaded
+        if (window.google?.maps) {
+            setMapsApiLoaded(true);
+        }
+        
+        return () => {
+            isMounted = false;
+        };
+    }, []);
+    
+    // Handle marker changes when coordinates are updated from the map
+    const handleMapReady = useCallback((mapInstance: google.maps.Map, markerInstance: google.maps.Marker) => {
+        console.log("Map and marker are ready");
+        setMap(mapInstance);
+        setMarker(markerInstance);
+    }, []);
+    
+    // Handle marker position changes
+    const handleMarkerPositionChange = useCallback((lat: number, lng: number) => {
+        console.log(`Marker position changed: lat=${lat}, lng=${lng}`);
+        setGroup(prev => ({
+            ...prev,
+            coordinates: {
+                latitude: lat,
+                longitude: lng
+            }
+        }));
     }, []);
 
     // Validate Instagram username
@@ -416,6 +595,21 @@ const AdminPage = () => {
             if (autocompleteInputRef.current) {
                 autocompleteInputRef.current.value = '';
             }
+            
+            // Reset autocomplete
+            if (typeof window !== 'undefined') {
+                window.__AUTOCOMPLETE_INITIALIZED = false;
+            }
+            autocompleteRef.current = null;
+            setAutocompleteInitialized(false);
+            
+            // Reinitialize autocomplete after a short delay
+            setTimeout(() => {
+                if (window.google?.maps?.places && autocompleteInputRef.current) {
+                    initAutocomplete();
+                }
+            }, 300);
+            
         } catch (error) {
             console.error("Erro ao adicionar grupo: ", error);
             let errorMessage = 'Erro desconhecido';
@@ -427,6 +621,28 @@ const AdminPage = () => {
     };
 
     return (
+        <>
+            {/* Load the Google Maps script only once with proper loading=async parameter */}
+            {!mapsApiLoaded && !window.google?.maps && (
+                <Script
+                    id="google-maps-api"
+                    strategy="afterInteractive"
+                    src={`https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places,marker&callback=initGoogleMaps&loading=async`}
+                />
+            )}
+            
+            {/* Add global styles for map loading animation */}
+            <style jsx global>{`
+                @keyframes mapFadeIn {
+                    from { opacity: 0.4; }
+                    to { opacity: 1; }
+                }
+                
+                .map-container .gm-style {
+                    animation: mapFadeIn 0.6s ease-out;
+                }
+            `}</style>
+            
         <div className="container mx-auto p-4">
             <div className="flex justify-between items-center mb-4">
                 <h1 className="text-2xl font-bold">Adicionar Pockets Dunamis</h1>
@@ -458,20 +674,131 @@ const AdminPage = () => {
                     className="w-full border p-2 rounded" 
                     placeholder="Pesquisar por universidade" 
                     disabled={locationSelected}
+                        onClick={() => {
+                            // Try to initialize autocomplete when the user clicks on the input
+                            if (window.google?.maps?.places && !window.__AUTOCOMPLETE_INITIALIZED) {
+                                initAutocomplete();
+                            }
+                        }}
                 />
                 {locationSelected && (
                     <button 
                         className="mt-2 bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded text-sm"
-                        onClick={() => setLocationSelected(false)}
+                            onClick={() => {
+                                setLocationSelected(false);
+                                // Reset autocomplete
+                                if (typeof window !== 'undefined') {
+                                    window.__AUTOCOMPLETE_INITIALIZED = false;
+                                }
+                                autocompleteRef.current = null;
+                                setAutocompleteInitialized(false);
+                                
+                                // Reset location field
+                                setGroup(prev => ({
+                                    ...prev,
+                                    location: '',
+                                }));
+                                
+                                // Reinitialize autocomplete 
+                                setTimeout(() => {
+                                    if (window.google?.maps?.places && autocompleteInputRef.current) {
+                                        initAutocomplete();
+                                    }
+                                }, 100);
+                            }}
                     >
                         Alterar Localização
                     </button>
                 )}
+                    
+                    {/* Status indicator for autocomplete */}
+                    {!mapsApiLoaded && (
+                        <p className="text-xs text-yellow-600 mt-1">
+                            Carregando API do Google Maps...
+                        </p>
+                    )}
+                    {mapsApiLoaded && !autocompleteInitialized && (
+                        <p className="text-xs text-yellow-600 mt-1">
+                            Inicializando autocompletar...
+                        </p>
+                    )}
+                    {autocompleteInitialized && !locationSelected && (
+                        <p className="text-xs text-green-600 mt-1">
+                            Digite o nome da universidade para ver sugestões
+                        </p>
+                    )}
+                    {locationSelected && group.university && (
+                        <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-green-800">
+                            <p className="font-medium">Universidade selecionada: {group.university}</p>
+                            <p className="text-xs">
+                                {group.city}, {group.state}, {group.country}
+                            </p>
+                            <p className="text-xs mt-1">
+                                Coordenadas: {group.coordinates.latitude.toFixed(6)}, {group.coordinates.longitude.toFixed(6)}
+                            </p>
+                        </div>
+                    )}
             </div>
             
+                {/* Replace the direct map container with our isolated component */}
             <div className="mb-6">
-                <div ref={mapRef} className="w-full h-[400px] border rounded"></div>
-                <p className="text-sm text-gray-600 mt-2">Clique no mapa ou arraste o marcador para definir a localização exata.</p>
+                    {mapsApiLoaded ? (
+                        <AdminMapComponent
+                            onMapReady={handleMapReady}
+                            onMarkerPositionChange={handleMarkerPositionChange}
+                            initialCoordinates={group.coordinates}
+                        />
+                    ) : (
+                        <div className="w-full h-[400px] border rounded map-container relative overflow-hidden">
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-white bg-opacity-90 z-10">
+                                <div className="w-14 h-14 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                                <p className="text-gray-700 font-medium">Carregando API do mapa...</p>
+                                <p className="text-sm text-gray-500 mt-1">Aguarde enquanto carregamos o Google Maps</p>
+                            </div>
+                        </div>
+                    )}
+                    
+                    <p className="text-sm text-gray-600 mt-2">
+                        {locationSelected 
+                            ? "A universidade selecionada está marcada no mapa. Você pode arrastar o marcador para ajustar a localização exata."
+                            : "Clique no mapa ou pesquise uma universidade acima para definir a localização."}
+                    </p>
+                    {group.coordinates.latitude !== 0 && (
+                        <p className="text-xs text-blue-600">
+                            Coordenadas atuais: {group.coordinates.latitude.toFixed(6)}, {group.coordinates.longitude.toFixed(6)}
+                        </p>
+                    )}
+                    
+                    {/* Debug button simplified with better error prevention */}
+                    {map && marker && group.coordinates.latitude !== 0 && (
+                        <button 
+                            type="button"
+                            className="mt-2 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 py-1 px-2 rounded"
+                            onClick={() => {
+                                try {
+                                    // Force marker to be visible and centered
+                                    const position = new window.google.maps.LatLng(
+                                        group.coordinates.latitude,
+                                        group.coordinates.longitude
+                                    );
+                                    
+                                    marker.setPosition(position);
+                                    marker.setVisible(true);
+                                    
+                                    if (map && position) {
+                                        map.setCenter(position);
+                                        map.setZoom(15);
+                                    }
+                                    
+                                    console.log("Debug: Marker visibility reset and centered");
+                                } catch (error) {
+                                    console.error("Error in centering marker:", error);
+                                }
+                            }}
+                        >
+                            Centralizar no marcador
+                        </button>
+                    )}
             </div>
             
             <form onSubmit={handleSubmit} className="space-y-4">               
@@ -670,6 +997,7 @@ const AdminPage = () => {
                 </button>
             </form>
         </div>
+        </>
     );
 };
 

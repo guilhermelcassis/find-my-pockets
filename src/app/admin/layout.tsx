@@ -2,7 +2,20 @@
 
 import { useAuth } from '../../lib/auth-context';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
+import Script from 'next/script';
+
+// Add the type declaration for the global guard
+declare global {
+  interface Window {
+    __GOOGLE_MAPS_INIT_GUARD?: {
+      initialized: boolean;
+      loading: boolean;
+      callbacks: Array<() => void>;
+    };
+    initializeGoogleMapsGuarded?: () => void;
+  }
+}
 
 export default function AdminLayout({
   children,
@@ -13,6 +26,19 @@ export default function AdminLayout({
   const router = useRouter();
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
+  // Add state to track whether admin check has started
+  const [adminCheckStarted, setAdminCheckStarted] = useState(false);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    // Set mounted ref for cleanup
+    isMountedRef.current = true;
+    
+    // Cleanup function
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -23,6 +49,10 @@ export default function AdminLayout({
 
     // Check if the user is an admin
     const checkAdminStatus = async () => {
+      // Prevent repeated calls and only run when component is mounted
+      if (adminCheckStarted || !isMountedRef.current) return;
+      setAdminCheckStarted(true);
+
       if (user && session) {
         try {
           // Force token refresh to get the latest claims
@@ -39,6 +69,9 @@ export default function AdminLayout({
           
           const data = await response.json();
           
+          // Only update state if component is still mounted
+          if (!isMountedRef.current) return;
+          
           if (data.isAdmin) {
             setIsAdmin(true);
             setIsAuthReady(true);
@@ -51,15 +84,33 @@ export default function AdminLayout({
           }
         } catch (error) {
           console.error('Error checking admin status:', error);
-          setIsAdmin(false);
+          if (isMountedRef.current) {
+            setIsAdmin(false);
+          }
+        } finally {
+          if (isMountedRef.current) {
+            // Reset the check status if there was an error
+            setAdminCheckStarted(false);
+          }
         }
       }
     };
     
-    if (user && isAdmin === null) {
+    if (user && isAdmin === null && !adminCheckStarted) {
       checkAdminStatus();
     }
-  }, [user, session, loading, router, isAdmin, refreshToken]);
+  }, [user, session, loading, router, isAdmin, refreshToken, adminCheckStarted]);
+
+  // Pre-initialize __GOOGLE_MAPS_INIT_GUARD on client-side
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.__GOOGLE_MAPS_INIT_GUARD = window.__GOOGLE_MAPS_INIT_GUARD || {
+        initialized: false,
+        loading: false,
+        callbacks: []
+      };
+    }
+  }, []);
 
   if (loading || !user || isAdmin === null) {
     return (
@@ -96,35 +147,45 @@ export default function AdminLayout({
   }
 
   return (
-    <div>
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-          <h1 className="text-lg font-semibold text-gray-900">Dunamis Pockets Admin</h1>
-          <div>
-            <span className="text-sm text-gray-600 mr-2">
-              Signed in as: {user.email}
-            </span>
-            <button
-              className="text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 py-1 px-3 rounded"
-              onClick={async () => {
-                await logOut();
-                router.push('/login');
-              }}
-            >
-              Sign Out
-            </button>
-          </div>
-        </div>
-      </header>
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        {isAuthReady ? children : (
-          <div className="text-center py-12">
-            <div className="animate-pulse">
-              <p className="text-gray-600">Finalizing authentication...</p>
+    <>
+      {/* Preload Google Maps script for admin pages */}
+      <Script
+        id="google-maps-preload"
+        strategy="beforeInteractive"
+        src={`https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places,marker&v=beta&loading=async&callback=initializeGoogleMapsGuarded`}
+      />
+      
+      {/* Admin layout wrapper */}
+      <div className="admin-layout">
+        <header className="bg-white shadow-sm border-b">
+          <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+            <h1 className="text-lg font-semibold text-gray-900">Dunamis Pockets Admin</h1>
+            <div>
+              <span className="text-sm text-gray-600 mr-2">
+                Signed in as: {user.email}
+              </span>
+              <button
+                className="text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 py-1 px-3 rounded"
+                onClick={async () => {
+                  await logOut();
+                  router.push('/login');
+                }}
+              >
+                Sign Out
+              </button>
             </div>
           </div>
-        )}
-      </main>
-    </div>
+        </header>
+        <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+          {isAuthReady ? children : (
+            <div className="text-center py-12">
+              <div className="animate-pulse">
+                <p className="text-gray-600">Finalizing authentication...</p>
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
+    </>
   );
 } 
