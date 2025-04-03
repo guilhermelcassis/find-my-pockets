@@ -527,9 +527,12 @@ const AdminPage = () => {
                 throw new Error("Nome de usuário do Instagram inválido");
             }
 
-            // Create object with all the group data
+            // Create object with all the group data but without the id field
+            // Destructure to omit the id field - Supabase will auto-generate a UUID
+            const { id, ...groupWithoutId } = group;
+            
             const groupData = {
-                ...group,
+                ...groupWithoutId,
                 leader: {
                     name: selectedLeader.name,
                     phone: selectedLeader.phone,
