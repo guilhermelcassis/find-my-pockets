@@ -10,6 +10,7 @@ interface MapProps {
   zoom?: number;
   height?: string;
   selectedGroupId?: string | null;
+  onMarkerClick?: (groupId: string) => void;
 }
 
 // Updated Google Maps type definitions including AdvancedMarkerElement
@@ -85,7 +86,8 @@ const Map = ({
   centerLng = -47.8806330986609, 
   zoom = 6,
   height = '500px',
-  selectedGroupId = null
+  selectedGroupId = null,
+  onMarkerClick
 }: MapProps) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<google.maps.Map | null>(null);
@@ -131,8 +133,25 @@ const Map = ({
     }
 
     if (!mapRef.current) {
+      console.error("Map container is not available (mapRef.current is null)");
       setLoadError("Map container is not available. Please refresh the page.");
       return;
+    }
+    
+    // Debug container dimensions
+    const containerRect = mapRef.current.getBoundingClientRect();
+    console.log("Map container dimensions:", {
+      width: containerRect.width,
+      height: containerRect.height,
+      visible: containerRect.width > 0 && containerRect.height > 0,
+      offsetWidth: mapRef.current.offsetWidth,
+      offsetHeight: mapRef.current.offsetHeight,
+      clientWidth: mapRef.current.clientWidth,
+      clientHeight: mapRef.current.clientHeight
+    });
+    
+    if (containerRect.width === 0 || containerRect.height === 0) {
+      console.warn("Map container has zero width or height. Map will not display correctly.");
     }
     
     if (!window.google?.maps) {
@@ -156,7 +175,6 @@ const Map = ({
         streetViewControl: false,
         fullscreenControl: true,
         zoomControl: true,
-        // Adding a default mapId for advanced markers
         mapId: process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || '8f077ee2408e83c5',
       };
 
@@ -164,7 +182,11 @@ const Map = ({
       const newMap = new window.google.maps.Map(mapRef.current, mapOptions);
       
       // Create info window
-      const newInfoWindow = new window.google.maps.InfoWindow();
+      const newInfoWindow = new window.google.maps.InfoWindow({
+        maxWidth: 320,
+        pixelOffset: new window.google.maps.Size(0, -5),
+        disableAutoPan: false
+      });
       
       // Set state without delay - the map container is already visible
       setMap(newMap);
@@ -231,6 +253,7 @@ const Map = ({
         
         // Create script element
         const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+        console.log("API Key available:", !!apiKey, "Length:", apiKey ? apiKey.length : 0);
         if (!apiKey) {
           const error = new Error("Google Maps API key is missing");
           setLoadError(error.message);
@@ -239,19 +262,33 @@ const Map = ({
         }
         
         const mapId = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || '8f077ee2408e83c5';
+        
+        // Create and configure the script element
         const script = document.createElement('script');
         script.id = 'google-maps-script';
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initializeGoogleMaps&libraries=marker&v=beta&mapIds=${mapId}`;
+        
+        // Fix the loading warning by setting the proper attributes in the correct order
+        // Set type="text/javascript" first
+        script.type = 'text/javascript';
+        
+        // Set loading="async" for better performance (addressing the warning)
+        script.setAttribute('loading', 'async');
+        
+        // Keep the regular async attribute too
         script.async = true;
         script.defer = true;
         
-        // Handle errors in script loading
+        // Set the src last
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initializeGoogleMaps&libraries=marker&v=beta&mapIds=${mapId}`;
+        
         script.onerror = (error) => {
           console.error("Error loading Google Maps script:", error);
           googleMapsLoadingRef.current = false;
           setLoadError("Failed to load Google Maps. Please check your connection and try again.");
           reject(new Error("Failed to load Google Maps script"));
         };
+        
+        console.log("Script URL created successfully, attempting to add to document head");
         
         document.head.appendChild(script);
         console.log("Added Google Maps script to document");
@@ -348,119 +385,315 @@ const Map = ({
   }, []);
 
   // Function to create a advanced marker with fallbacks
-  const createAdvancedMarker = useCallback((group: Group, isSelected: boolean, map: google.maps.Map) => {
+  const createAdvancedMarker = useCallback((
+    group: Group,
+    isSelected: boolean,
+    map: google.maps.Map
+  ): google.maps.marker.AdvancedMarkerElement | null => {
     try {
-      // Advanced Marker Element requires the marker package
+      // Make sure the element exists before trying to use it
       if (!window.google.maps.marker || !window.google.maps.marker.AdvancedMarkerElement) {
-        console.warn("Advanced marker not available, falling back to legacy marker");
         return null;
       }
+
+      // Create marker element with proper styling
+      const markerSize = isSelected ? 40 : 32; // Make selected markers larger
+      const markerColor = isSelected ? '#2563eb' : '#3b82f6'; // Use a darker blue for selected
+      const shadowSize = isSelected ? '0 4px 8px rgba(37, 99, 235, 0.5)' : '0 2px 4px rgba(0, 0, 0, 0.2)';
       
-      // Create container for marker content
+      // Create container for the marker
       const container = document.createElement('div');
-      
-      // Define background color based on selection
-      const bgColor = isSelected ? '#1e88e5' : '#e53935'; // Blue for selected, red for normal
-      
-      // Create marker pin element with appropriate styling
+      container.className = 'marker-container';
       container.innerHTML = `
-        <div style="
-          width: ${isSelected ? '40px' : '32px'};
-          height: ${isSelected ? '40px' : '32px'};
-          background: ${bgColor};
-          border-radius: 50% 50% 0% 50%;
-          transform: rotate(45deg);
-          border: 2px solid white;
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-          transition: all 0.3s ease;
+        <div class="pocket-marker" style="
+          width: ${markerSize}px;
+          height: ${markerSize}px;
+          background-color: ${markerColor};
+          border-radius: 50% 50% 50% 0;
+          transform: rotate(-45deg);
           display: flex;
-          align-items: center;
           justify-content: center;
-          z-index: ${isSelected ? 1000 : 100};
+          align-items: center;
+          box-shadow: ${shadowSize};
+          transition: all 0.3s ease;
+          cursor: pointer;
+          border: ${isSelected ? '2px solid white' : 'none'};
         ">
           <div style="
-            font-weight: bold;
+            transform: rotate(45deg);
             color: white;
-            transform: rotate(-45deg);
+            font-weight: bold;
             font-size: ${isSelected ? '16px' : '14px'};
-            text-align: center;
-            font-family: sans-serif;
-          ">P</div>
+            font-family: Arial, sans-serif;
+          ">
+            ${group.university.charAt(0)}
+          </div>
         </div>
+        ${isSelected ? '<div class="marker-pulse"></div>' : ''}
       `;
       
-      // Create the advanced marker
-      const marker = new window.google.maps.marker.AdvancedMarkerElement({
-        map: map,
-        position: { 
-          lat: group.coordinates.latitude, 
-          lng: group.coordinates.longitude 
-        },
-        title: group.university,
-        content: container,
-        zIndex: isSelected ? 1000 : 100
-      });
-      
-      // If selected, add bounce animation - no direct animation APIs, so we use CSS/setTimeout
+      // Add CSS for the pulse effect
       if (isSelected) {
-        container.style.animation = 'bounce 0.8s ease';
-        container.style.transformOrigin = 'bottom center';
-        
-        // Define animation in a <style> element if not already defined
-        if (!document.getElementById('marker-animations')) {
-          const style = document.createElement('style');
-          style.id = 'marker-animations';
-          style.textContent = `
-            @keyframes bounce {
-              0%, 100% { transform: translateY(0) rotate(45deg); }
-              50% { transform: translateY(-15px) rotate(45deg); }
+        const style = document.createElement('style');
+        style.textContent = `
+          .marker-container {
+            position: relative;
+          }
+          .marker-pulse {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: ${markerSize + 20}px;
+            height: ${markerSize + 20}px;
+            border-radius: 50%;
+            background-color: rgba(37, 99, 235, 0.3);
+            animation: pulse 1.5s infinite;
+            z-index: -1;
+          }
+          @keyframes pulse {
+            0% {
+              transform: translate(-50%, -50%) scale(0.8);
+              opacity: 0.7;
             }
-          `;
-          document.head.appendChild(style);
-        }
+            70% {
+              transform: translate(-50%, -50%) scale(1.3);
+              opacity: 0;
+            }
+            100% {
+              transform: translate(-50%, -50%) scale(0.8);
+              opacity: 0;
+            }
+          }
+        `;
+        container.appendChild(style);
       }
+
+      // Get the marker element to add interactivity
+      const markerElement = container.querySelector('.pocket-marker') as HTMLElement;
       
+      // Add hover effects
+      if (markerElement) {
+        markerElement.addEventListener('mouseenter', () => {
+          markerElement.style.transform = 'rotate(-45deg) scale(1.1)';
+          markerElement.style.boxShadow = '0 4px 12px rgba(37, 99, 235, 0.6)';
+        });
+        
+        markerElement.addEventListener('mouseleave', () => {
+          markerElement.style.transform = 'rotate(-45deg) scale(1)';
+          markerElement.style.boxShadow = shadowSize;
+        });
+      }
+
+      // Create the advanced marker with our styled element
+      const marker = new window.google.maps.marker.AdvancedMarkerElement({
+        position: {
+          lat: group.coordinates.latitude,
+          lng: group.coordinates.longitude
+        },
+        map,
+        content: container,
+        title: group.name,
+        zIndex: isSelected ? 1000 : 100, // Put selected markers on top
+        gmpClickable: true, // Explicitly make the marker clickable for accessibility
+        gmpDraggable: false
+      });
+
+      // For accessibility, add tooltip
+      if (marker.element) {
+        marker.element.setAttribute('role', 'button');
+        marker.element.setAttribute('aria-label', `${group.name} - ${group.university} in ${group.city}`);
+        marker.element.setAttribute('tabindex', '0');
+      }
+
+      // Don't add the click event listener here, as it will be added later
+      // when all markers are processed
+
       return marker;
     } catch (error) {
-      console.error("Error creating advanced marker:", error);
+      console.error('Error creating advanced marker:', error);
       return null;
     }
   }, []);
 
   // Function to create a legacy marker (used as fallback)
-  const createLegacyMarker = useCallback((group: Group, isSelected: boolean, map: google.maps.Map) => {
+  const createLegacyMarker = useCallback((
+    group: Group,
+    isSelected: boolean,
+    map: google.maps.Map
+  ): google.maps.Marker | null => {
     try {
-      // Use different icon for selected marker - make it larger
-      const markerIcon = {
-        url: isSelected 
-          ? 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
-          : 'https://maps.google.com/mapfiles/ms/icons/red-dot.png',
-        scaledSize: new window.google.maps.Size(isSelected ? 48 : 32, isSelected ? 48 : 32),
-        origin: new window.google.maps.Point(0, 0),
-        anchor: new window.google.maps.Point(isSelected ? 24 : 16, isSelected ? 48 : 32)
-      };
-
-      // Create and add the marker - use DROP animation only when selected
+      // Create a marker with legacy API
       const marker = new window.google.maps.Marker({
-        position: { 
-          lat: group.coordinates.latitude, 
-          lng: group.coordinates.longitude 
+        position: {
+          lat: group.coordinates.latitude,
+          lng: group.coordinates.longitude
         },
-        map: map,
-        title: group.university,
-        animation: isSelected ? window.google.maps.Animation.DROP : undefined,
-        icon: markerIcon,
-        zIndex: isSelected ? 1000 : 1 // Selected marker appears on top
+        map,
+        title: group.name,
+        cursor: 'pointer',
+        zIndex: isSelected ? 1000 : 100, // Selected markers above others
+        animation: isSelected ? window.google.maps.Animation.BOUNCE : null,
+        icon: {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          fillColor: isSelected ? '#2563eb' : '#3b82f6',
+          fillOpacity: 1,
+          strokeColor: 'white',
+          strokeWeight: isSelected ? 2 : 1,
+          scale: isSelected ? 12 : 10
+        },
+        label: {
+          text: group.university.charAt(0),
+          color: 'white',
+          fontWeight: 'bold',
+          fontSize: isSelected ? '14px' : '12px'
+        }
       });
-      
+
+      // Add animation for selected marker, but stop after a short time
+      if (isSelected && marker.getAnimation() === window.google.maps.Animation.BOUNCE) {
+        setTimeout(() => {
+          marker.setAnimation(null);
+        }, 1500); // Stop bouncing after 1.5 seconds
+      }
+
       return marker;
     } catch (error) {
-      console.error("Error creating legacy marker:", error);
+      console.error('Error creating legacy marker:', error);
       return null;
     }
   }, []);
 
-  // Add markers when groups change and map is ready - including fixed dependency array
+  // Function to generate formatted info window content
+  const generateInfoWindowContent = (group: Group): string => {
+    // Format the meeting day and time
+    const meetingSchedule = group.dayofweek && group.time 
+      ? `${group.dayofweek} at ${group.time}`
+      : 'Contact for schedule';
+
+    // Format the leader information
+    const leaderInfo = group.leader?.name 
+      ? `<strong>${group.leader.name}</strong>${group.leader.curso ? ` (${group.leader.curso})` : ''}`
+      : 'Contact for leader information';
+
+    // Format the contact options
+    let contactOptions = '';
+    if (group.leader?.phone) {
+      contactOptions += `<a href="https://wa.me/${(group.leader.phone || '').replace(/\D/g, '')}" target="_blank" class="contact-btn whatsapp">WhatsApp</a>`;
+    }
+    if (group.instagram) {
+      contactOptions += `<a href="https://instagram.com/${group.instagram.replace('@', '')}" target="_blank" class="contact-btn instagram">Instagram</a>`;
+    }
+    
+    if (!contactOptions) {
+      contactOptions = '<span class="no-contact">No contact information available</span>';
+    }
+
+    return `
+      <div class="info-window-content">
+        <style>
+          .info-window-content {
+            font-family: 'Roboto', Arial, sans-serif;
+            padding: 8px;
+            max-width: 300px;
+            color: #333;
+          }
+          .group-name {
+            font-size: 18px;
+            font-weight: bold;
+            color: #1a73e8;
+            margin-bottom: 8px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 8px;
+          }
+          .university {
+            font-weight: 600;
+            color: #4285f4;
+            margin-bottom: 6px;
+          }
+          .info-section {
+            margin-bottom: 6px;
+          }
+          .info-label {
+            font-weight: 600;
+            color: #555;
+          }
+          .address {
+            font-style: italic;
+            color: #666;
+            margin-bottom: 8px;
+          }
+          .meeting-info {
+            background-color: #f5f5f5;
+            padding: 6px;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            font-size: 13px;
+          }
+          .contact-section {
+            margin-top: 10px;
+            border-top: 1px solid #eee;
+            padding-top: 8px;
+          }
+          .contact-options {
+            display: flex;
+            gap: 6px;
+            margin-top: 8px;
+            flex-wrap: wrap;
+          }
+          .contact-btn {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            text-decoration: none;
+            color: white;
+            font-size: 12px;
+            font-weight: 500;
+          }
+          .whatsapp {
+            background-color: #25D366;
+          }
+          .instagram {
+            background-color: #E1306C;
+          }
+          .facebook {
+            background-color: #1877F2;
+          }
+          .no-contact {
+            font-style: italic;
+            color: #999;
+            font-size: 12px;
+          }
+        </style>
+        <div class="group-name">${group.name || 'Unnamed Group'}</div>
+        <div class="university">${group.university || 'Independent Group'}</div>
+        
+        <div class="info-section">
+          <div class="info-label">Location:</div>
+          <div>${group.city}${group.state ? `, ${group.state}` : ''}</div>
+        </div>
+        
+        ${group.fulladdress ? `<div class="address">${group.fulladdress}</div>` : ''}
+        
+        <div class="meeting-info">
+          <div class="info-label">Meetings:</div>
+          <div>${meetingSchedule}</div>
+          ${group.local ? `<div>Location: ${group.local}</div>` : ''}
+        </div>
+        
+        <div class="contact-section">
+          <div class="info-label">Leader:</div>
+          <div>${leaderInfo}</div>
+          
+          <div class="contact-options">
+            ${contactOptions}
+          </div>
+        </div>
+      </div>
+    `;
+  };
+
+  // Update the effect that adds the markers to use the generateInfoWindowContent
   useEffect(() => {
     // Only run when map and infoWindow are available and in ready state
     if (!isMapReady || !map || !infoWindow) {
@@ -475,10 +708,16 @@ const Map = ({
     const currentGroupIds = groups.map(g => g.id).sort().join(',');
     
     // If nothing has changed, only selectedGroupId, don't redraw all markers
-    if (currentGroupIds === prevGroupIds.current && !selectedGroupId) {
+    // The key change: We now properly handle selectedGroupId by not redrawing all markers
+    // just because the selectedGroupId changed - instead we'll handle that in the other effect
+    if (currentGroupIds === prevGroupIds.current) {
+      // Don't redraw markers just because a marker was selected
+      console.log("Skipping marker redraw - groups haven't changed");
       return;
     }
     
+    console.log("Drawing markers - group IDs have changed");
+
     // Update the reference for next comparison
     prevGroupIds.current = currentGroupIds;
     
@@ -544,11 +783,11 @@ const Map = ({
       
       if (selectedGroup) {
         console.log('Selected group found:', selectedGroup.university, 
-                   'ID:', selectedGroup.id,
-                   'Coordinates:', selectedGroup.coordinates.latitude, selectedGroup.coordinates.longitude);
+                  'ID:', selectedGroup.id,
+                  'Coordinates:', selectedGroup.coordinates.latitude, selectedGroup.coordinates.longitude);
       } else if (selectedGroupId) {
         console.log('Selected group NOT found. Looking for ID:', selectedGroupId, 
-                   'Available IDs:', validGroups.map(g => g.id).join(', '));
+                  'Available IDs:', validGroups.map(g => g.id).join(', '));
       }
 
       // Create new arrays to store markers
@@ -580,126 +819,108 @@ const Map = ({
         newMarkersArray.push(marker);
         newMarkersMap[group.id] = marker;
 
-        // Create info window content with enhanced styling and contact info
-        const content = `
-          <div style="padding: 8px; max-width: 300px; font-family: Arial, sans-serif;">
-            <h3 style="font-weight: bold; font-size: 16px; margin-bottom: 5px;">${group.university}</h3>
-            <p style="margin: 4px 0; color: #555;">${group.city}, ${group.state}, ${group.country}</p>
-            
-            <div style="margin-top: 8px;">
-              <p style="margin: 4px 0; font-size: 14px;">
-                <span style="font-weight: 500;">Encontros:</span> Toda ${group.dayofweek} às ${group.time}
-              </p>
-              ${group.local ? 
-                `<p style="margin: 4px 0; font-size: 14px;">
-                  <span style="font-weight: 500;">Local:</span> ${group.local}
-                </p>` : ''}
-            </div>
-
-            ${group.fulladdress ? 
-              `<div style="margin-top: 8px;">
-                <p style="margin: 4px 0; font-size: 14px;">
-                  <span style="font-weight: 500;">Endereço:</span> ${group.fulladdress}
-                </p>
-                <a 
-                  href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(group.fulladdress)}"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style="color: #4285F4; text-decoration: none; font-size: 13px; display: inline-block; margin-top: 4px;"
-                >
-                  🗺️ Como Chegar
-                </a>
-              </div>` : ''}
-
-            <div style="margin-top: 8px;">
-              <p style="margin: 4px 0; font-size: 14px;">
-                <span style="font-weight: 500;">Líder:</span> ${group.leader?.name || 'Desconhecido'}
-              </p>
-              ${group.leader?.email ? 
-                `<p style="margin: 4px 0; font-size: 14px;">
-                  <span style="font-weight: 500;">E-mail:</span> ${group.leader?.email}
-                </p>` : ''}
-            </div>
-
-            <div style="margin-top: 10px; display: flex; gap: 8px;">
-              ${group.leader?.phone ? 
-                `<a 
-                  href="https://wa.me/${(group.leader?.phone || '').replace(/\D/g, '')}"
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  style="background-color: #25D366; color: white; padding: 4px 8px; border-radius: 4px; text-decoration: none; font-size: 13px;"
-                >
-                  WhatsApp
-                </a>` : ''}
-              
-              ${group.instagram ? 
-                `<a 
-                  href="https://instagram.com/${group.instagram.replace('@', '')}"
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  style="background-color: #E1306C; color: white; padding: 4px 8px; border-radius: 4px; text-decoration: none; font-size: 13px;"
-                >
-                  Instagram
-                </a>` : ''}
-            </div>
-          </div>
-        `;
+        // Generate the info window content using our helper function
+        const content = generateInfoWindowContent(group);
 
         // Add event listeners for markers
         if (marker) {
           // For legacy marker
           if (marker instanceof google.maps.Marker) {
             marker.addListener('click', () => {
+              console.log('Legacy marker clicked for group:', group.id, group.university);
+              
+              // First set the info window directly without triggering a full redraw
               infoWindow.close();
+              
+              // Generate the content
+              const content = generateInfoWindowContent(group);
               infoWindow.setContent(content);
+              
+              // Open the info window
               infoWindow.open(map, marker);
               
-              // Center map on this marker with a slightly higher zoom
-              map.panTo(marker.getPosition() as google.maps.LatLng);
-              map.setZoom(14);
+              // Check if map exists before using its methods
+              if (map) {
+                // Center map on this marker with a smooth animation
+                map.panTo(marker.getPosition() as google.maps.LatLng);
+                
+                // Set zoom only if current zoom is too low
+                const currentZoom = map.getZoom();
+                if (typeof currentZoom === 'number' && currentZoom < 14) {
+                  map.setZoom(14);
+                }
+              }
+              
+              // Only call the onMarkerClick callback at the very end
+              // This will update selectedGroupId in the parent component
+              if (onMarkerClick) {
+                // Add a small delay to prevent immediate re-renders
+                setTimeout(() => {
+                  onMarkerClick(group.id);
+                }, 10);
+              }
             });
-            
-            // Immediately open info window for selected marker
-            if (isSelected) {
-              infoWindow.setContent(content);
-              infoWindow.open(map, marker);
-              map.panTo(marker.getPosition() as google.maps.LatLng);
-              map.setZoom(14);
-            }
           } else {
-            // For advanced marker - use 'gmp-click' instead of 'click'
+            // For advanced marker - use the standard 'click' event for AdvancedMarkerElement
             const position = { 
               lat: group.coordinates.latitude, 
               lng: group.coordinates.longitude 
             };
             
-            marker.addEventListener('gmp-click', () => {
+            marker.addListener('click', () => {
+              console.log('Advanced marker clicked for group:', group.id, group.university);
+              
+              // First set the info window directly without triggering a full redraw
               infoWindow.close();
+              
+              // Generate the content
+              const content = generateInfoWindowContent(group);
               infoWindow.setContent(content);
-              infoWindow.open(map);
+              
+              // Position and open the info window
               infoWindow.setPosition(position);
+              infoWindow.open(map);
               
               // Also center on this marker when clicked
               map.panTo(position);
-              map.setZoom(14);
-            });
-            
-            // If this marker is selected, open its info window immediately
-            if (isSelected) {
-              // Log position data for debugging
-              console.log('Opening info window for advanced marker:', group.university);
-              console.log('Position:', position);
               
-              setTimeout(() => {
-                infoWindow.setContent(content);
-                infoWindow.open(map);
-                infoWindow.setPosition(position);
-                
-                // Ensure map is centered on this marker
-                map.setCenter(position);
+              // Set appropriate zoom level
+              const currentZoom = map.getZoom();
+              if (typeof currentZoom === 'number' && currentZoom < 14) {
                 map.setZoom(14);
-              }, 200);
-            }
+              }
+              
+              // Add visual feedback - temporarily highlight the marker
+              if (marker.content) {
+                // Cast content to HTMLElement to use querySelector
+                const content = marker.content as HTMLElement;
+                const markerEl = content.querySelector('.pocket-marker') as HTMLElement;
+                if (markerEl) {
+                  // Save original transform
+                  const originalTransform = markerEl.style.transform;
+                  const originalShadow = markerEl.style.boxShadow;
+                  
+                  // Apply highlight effect
+                  markerEl.style.transform = 'rotate(-45deg) scale(1.2)';
+                  markerEl.style.boxShadow = '0 6px 16px rgba(37, 99, 235, 0.8)';
+                  
+                  // Reset after animation
+                  setTimeout(() => {
+                    markerEl.style.transform = originalTransform;
+                    markerEl.style.boxShadow = originalShadow;
+                  }, 300);
+                }
+              }
+              
+              // Only call the onMarkerClick callback at the very end
+              // This will update selectedGroupId in the parent component
+              if (onMarkerClick) {
+                // Add a small delay to prevent immediate re-renders
+                setTimeout(() => {
+                  onMarkerClick(group.id);
+                }, 10);
+              }
+            });
           }
         }
       });
@@ -715,110 +936,14 @@ const Map = ({
           lng: selectedGroup.coordinates.longitude
         };
         
-        console.log('Setting map center for selected group with ID:', selectedGroupId);
-        console.log('Center position:', centerPosition);
+        console.log('Initial positioning for selected group:', selectedGroup.university);
         
-        // More aggressive centering - set both center and pan with higher zoom
+        // Center map once - don't need to do this again since we have the separate effect
         map.setCenter(centerPosition);
-        map.panTo(centerPosition);
-        map.setZoom(15); // Higher zoom level for better visibility
+        map.setZoom(15);
         
-        // Add a slight delay to ensure markers are rendered before we open the info window
-        const centeringTimeout = setTimeout(() => {
-          // Double-check that map and selectedGroup still exist
-          if (map && selectedGroup) {
-            // Re-center again in case map has moved
-            map.panTo(centerPosition);
-            
-            // Open info window for the selected marker
-            const selectedMarker = newMarkersMap[selectedGroup.id];
-            if (selectedMarker && infoWindow) {
-              console.log('Found marker for selected group:', selectedGroup.id, 
-                         'Marker type:', selectedMarker instanceof google.maps.Marker ? 'Legacy' : 'Advanced');
-              
-              // Use the same rich content template as defined for regular markers
-              const content = `
-                <div style="padding: 8px; max-width: 300px; font-family: Arial, sans-serif;">
-                  <h3 style="font-weight: bold; font-size: 16px; margin-bottom: 5px;">${selectedGroup.university}</h3>
-                  <p style="margin: 4px 0; color: #555;">${selectedGroup.city}, ${selectedGroup.state}, ${selectedGroup.country}</p>
-                  
-                  <div style="margin-top: 8px;">
-                    <p style="margin: 4px 0; font-size: 14px;">
-                      <span style="font-weight: 500;">Encontros:</span> Toda ${selectedGroup.dayofweek} às ${selectedGroup.time}
-                    </p>
-                    ${selectedGroup.local ? 
-                      `<p style="margin: 4px 0; font-size: 14px;">
-                        <span style="font-weight: 500;">Local:</span> ${selectedGroup.local}
-                      </p>` : ''}
-                  </div>
-
-                  ${selectedGroup.fulladdress ? 
-                    `<div style="margin-top: 8px;">
-                      <p style="margin: 4px 0; font-size: 14px;">
-                        <span style="font-weight: 500;">Endereço:</span> ${selectedGroup.fulladdress}
-                      </p>
-                      <a 
-                        href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedGroup.fulladdress)}"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style="color: #4285F4; text-decoration: none; font-size: 13px; display: inline-block; margin-top: 4px;"
-                      >
-                        🗺️ Como Chegar
-                      </a>
-                    </div>` : ''}
-
-                  <div style="margin-top: 8px;">
-                    <p style="margin: 4px 0; font-size: 14px;">
-                      <span style="font-weight: 500;">Líder:</span> ${selectedGroup.leader?.name || 'Desconhecido'}
-                    </p>
-                    ${selectedGroup.leader?.email ? 
-                      `<p style="margin: 4px 0; font-size: 14px;">
-                        <span style="font-weight: 500;">E-mail:</span> ${selectedGroup.leader?.email}
-                      </p>` : ''}
-                  </div>
-
-                  <div style="margin-top: 10px; display: flex; gap: 8px;">
-                    ${selectedGroup.leader?.phone ? 
-                      `<a 
-                        href="https://wa.me/${(selectedGroup.leader?.phone || '').replace(/\D/g, '')}"
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        style="background-color: #25D366; color: white; padding: 4px 8px; border-radius: 4px; text-decoration: none; font-size: 13px;"
-                      >
-                        WhatsApp
-                      </a>` : ''}
-                    
-                    ${selectedGroup.instagram ? 
-                      `<a 
-                        href="https://instagram.com/${selectedGroup.instagram.replace('@', '')}"
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        style="background-color: #E1306C; color: white; padding: 4px 8px; border-radius: 4px; text-decoration: none; font-size: 13px;"
-                      >
-                        Instagram
-                      </a>` : ''}
-                  </div>
-                </div>
-              `;
-              
-              infoWindow.setContent(content);
-              
-              // Open the info window appropriately based on marker type
-              if (selectedMarker instanceof google.maps.Marker) {
-                infoWindow.open(map, selectedMarker);
-              } else {
-                // For advanced marker
-                infoWindow.setPosition(centerPosition);
-                infoWindow.open(map);
-              }
-              
-              console.log('Opened info window for selected group:', selectedGroup.university);
-            }
-          }
-        }, 300);
-        
-        // Store timeout ID for cleanup
-        timeoutIds.push(centeringTimeout);
+        // The info window opening for selected markers is now handled in the selectedGroupId effect
+        // This prevents duplicate info window opening and reduces render cycles
       } else if (newMarkersArray.length > 0 && !initialZoomDone) {
         // Only fit bounds on initial load or when no specific selection
         try {
@@ -870,19 +995,27 @@ const Map = ({
     return () => {
       timeoutIds.forEach(id => clearTimeout(id));
     };
-  }, [isMapReady, map, infoWindow, groups, selectedGroupId, centerLat, centerLng, zoom, supportsAdvancedMarkers, createAdvancedMarker, createLegacyMarker, initialZoomDone]);
+  }, [isMapReady, map, infoWindow, groups, selectedGroupId, centerLat, centerLng, zoom, supportsAdvancedMarkers, createAdvancedMarker, createLegacyMarker, initialZoomDone, generateInfoWindowContent, onMarkerClick]);
 
-  // Add a separate effect to handle just the selectedGroupId changes
+  // Update the separate effect for selectedGroupId to use the generateInfoWindowContent function
   useEffect(() => {
     // Skip if map or infoWindow is not ready yet
     if (!map || !infoWindow || !isMapReady) return;
+    
+    // Don't proceed if we're in the middle of updating markers
+    if (isUpdatingMarkers.current) return;
+    
+    // Get the reference to the marker directly from our map
+    const marker = selectedGroupId ? markersRef.current[selectedGroupId] : null;
     
     // Find the selected group
     const selectedGroup = selectedGroupId 
       ? groups.find(g => g.id === selectedGroupId) 
       : null;
     
-    if (selectedGroup) {
+    if (selectedGroup && marker) {
+      console.log('Handling selected marker for:', selectedGroup.university, 'without full redraw');
+      
       // Center the map on the selected group
       const position = {
         lat: selectedGroup.coordinates.latitude,
@@ -893,88 +1026,52 @@ const Map = ({
       map.setCenter(position);
       map.setZoom(15);
       
-      // Find the marker in our reference object
-      const marker = selectedGroupId ? markersRef.current[selectedGroupId] : null;
+      // Generate info window content using our helper function
+      const content = generateInfoWindowContent(selectedGroup);
       
-      if (marker) {
-        // Create info window content
-        const content = `
-          <div style="padding: 8px; max-width: 300px; font-family: Arial, sans-serif;">
-            <h3 style="font-weight: bold; font-size: 16px; margin-bottom: 5px;">${selectedGroup.university}</h3>
-            <p style="margin: 4px 0; color: #555;">${selectedGroup.city}, ${selectedGroup.state}, ${selectedGroup.country}</p>
-            
-            <div style="margin-top: 8px;">
-              <p style="margin: 4px 0; font-size: 14px;">
-                <span style="font-weight: 500;">Encontros:</span> Toda ${selectedGroup.dayofweek} às ${selectedGroup.time}
-              </p>
-              ${selectedGroup.local ? 
-                `<p style="margin: 4px 0; font-size: 14px;">
-                  <span style="font-weight: 500;">Local:</span> ${selectedGroup.local}
-                </p>` : ''}
-            </div>
-
-            ${selectedGroup.fulladdress ? 
-              `<div style="margin-top: 8px;">
-                <p style="margin: 4px 0; font-size: 14px;">
-                  <span style="font-weight: 500;">Endereço:</span> ${selectedGroup.fulladdress}
-                </p>
-                <a 
-                  href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedGroup.fulladdress)}"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style="color: #4285F4; text-decoration: none; font-size: 13px; display: inline-block; margin-top: 4px;"
-                >
-                  🗺️ Como Chegar
-                </a>
-              </div>` : ''}
-
-            <div style="margin-top: 8px;">
-              <p style="margin: 4px 0; font-size: 14px;">
-                <span style="font-weight: 500;">Líder:</span> ${selectedGroup.leader?.name || 'Desconhecido'}
-              </p>
-              ${selectedGroup.leader?.email ? 
-                `<p style="margin: 4px 0; font-size: 14px;">
-                  <span style="font-weight: 500;">E-mail:</span> ${selectedGroup.leader?.email}
-                </p>` : ''}
-            </div>
-
-            <div style="margin-top: 10px; display: flex; gap: 8px;">
-              ${selectedGroup.leader?.phone ? 
-                `<a 
-                  href="https://wa.me/${(selectedGroup.leader?.phone || '').replace(/\D/g, '')}"
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  style="background-color: #25D366; color: white; padding: 4px 8px; border-radius: 4px; text-decoration: none; font-size: 13px;"
-                >
-                  WhatsApp
-                </a>` : ''}
-              
-              ${selectedGroup.instagram ? 
-                `<a 
-                  href="https://instagram.com/${selectedGroup.instagram.replace('@', '')}"
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  style="background-color: #E1306C; color: white; padding: 4px 8px; border-radius: 4px; text-decoration: none; font-size: 13px;"
-                >
-                  Instagram
-                </a>` : ''}
-            </div>
-          </div>
-        `;
-        
-        // Open info window on the marker
-        infoWindow.setContent(content);
-        
-        if (marker instanceof google.maps.Marker) {
-          infoWindow.open(map, marker);
-        } else {
-          // For advanced marker
-          infoWindow.setPosition(position);
-          infoWindow.open(map);
-        }
+      // Open info window on the marker
+      infoWindow.setContent(content);
+      
+      if (marker instanceof google.maps.Marker) {
+        infoWindow.open(map, marker);
+      } else {
+        // For advanced marker
+        infoWindow.setPosition(position);
+        infoWindow.open(map);
       }
+    } else if (selectedGroupId) {
+      console.warn('Selected group or marker not found for ID:', selectedGroupId);
     }
-  }, [selectedGroupId, map, infoWindow, isMapReady, groups]);
+  }, [selectedGroupId, map, infoWindow, isMapReady, groups, generateInfoWindowContent]);
+
+  // Configure the info window to look better
+  useEffect(() => {
+    if (infoWindow) {
+      // Add custom styling to infoWindow if supported
+      google.maps.event.addListener(infoWindow, 'domready', () => {
+        try {
+          // Find and style the InfoWindow elements
+          const iwOuter = document.querySelector('.gm-style-iw-a') as HTMLElement;
+          if (iwOuter) {
+            // Add shadow and rounded corners
+            iwOuter.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.2)';
+            iwOuter.style.borderRadius = '8px';
+            
+            // Find close button and style it
+            const closeButton = document.querySelector('.gm-ui-hover-effect') as HTMLElement;
+            if (closeButton) {
+              closeButton.style.opacity = '1';
+              closeButton.style.right = '8px';
+              closeButton.style.top = '8px';
+              closeButton.style.borderRadius = '50%';
+            }
+          }
+        } catch (e) {
+          console.warn('Error styling info window:', e);
+        }
+      });
+    }
+  }, [infoWindow]);
 
   // Apply a skeleton loader style to mimic the map before it loads
   const skeletonStyle = {
@@ -985,55 +1082,83 @@ const Map = ({
 
   // Adjust return to ensure map container has proper dimensions
   return (
-    <div className="relative rounded-lg shadow-inner" style={{ width: '100%', height, minHeight: '400px', maxHeight: '100%' }}>
-      {/* Always visible map container with skeleton background while loading */}
+    <div className="relative w-full h-full">
+      {/* Add global styles for InfoWindow */}
+      <style jsx global>{`
+        /* InfoWindow styling */
+        .gm-style-iw {
+          padding: 2px !important;
+          border-radius: 8px !important;
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15) !important;
+        }
+
+        .gm-style-iw-d {
+          overflow: hidden !important;
+          max-height: none !important;
+        }
+
+        .gm-ui-hover-effect {
+          opacity: 0.8 !important;
+          background: #ffffff !important;
+          border-radius: 50% !important;
+          width: 26px !important;
+          height: 26px !important;
+          top: 6px !important;
+          right: 6px !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+        }
+
+        .gm-ui-hover-effect img {
+          width: 16px !important;
+          height: 16px !important;
+          margin: 0 !important;
+        }
+
+        .gm-ui-hover-effect:hover {
+          opacity: 1 !important;
+        }
+      `}</style>
+      
+      {/* Map container with fallback background color */}
       <div 
         ref={mapRef} 
-        className="absolute inset-0 rounded-lg transition-all duration-1000 ease-in-out"
+        className="rounded-lg overflow-hidden w-full"
         style={{ 
-          width: '100%', 
-          height: '100%',
-          ...(!isMapReady && !loadError ? skeletonStyle : {})
-        }} 
-      />
+          height: height || '500px',
+          backgroundColor: '#e5e7eb', // Light gray fallback
+          position: 'relative',
+        }}
+      ></div>
       
-      {/* Only show error message if there is an error */}
+      {/* Error message overlay */}
       {loadError && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 bg-opacity-90 rounded-lg p-4 z-10 transition-opacity duration-300">
-          <div className="text-center max-w-md">
-            <div className="inline-block p-2 rounded-full bg-red-100 text-red-500 mb-2">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-medium text-red-800">Unable to load map</h3>
-            <p className="mt-1 text-sm text-gray-600">{loadError}</p>
-            <button 
-              onClick={() => window.location.reload()} 
-              className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-            >
-              Refresh Page
-            </button>
+        <div 
+          className="absolute inset-0 bg-white bg-opacity-90 flex flex-col items-center justify-center p-4 z-50 rounded-lg"
+        >
+          <div className="text-red-600 font-semibold text-lg mb-3">
+            {loadError}
+          </div>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
+          >
+            Reload Page
+          </button>
+        </div>
+      )}
+
+      {/* Loading indicator */}
+      {!isMapReady && !loadError && (
+        <div className="absolute inset-0 bg-gray-100 bg-opacity-75 flex items-center justify-center z-40 rounded-lg">
+          <div className="flex flex-col items-center">
+            <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            <p className="mt-3 text-gray-700">Loading map...</p>
           </div>
         </div>
       )}
-      
-      {/* Add global styles for enhanced animations */}
-      <style jsx global>{`
-        @keyframes pulse {
-          0% { opacity: 0.6; }
-          50% { opacity: 0.8; }
-          100% { opacity: 0.6; }
-        }
-        @keyframes shimmer {
-          0% { background-position: -1000px 0; }
-          100% { background-position: 1000px 0; }
-        }
-        .gm-style-iw {
-          transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out !important;
-          transform-origin: 50% 100%;
-        }
-      `}</style>
     </div>
   );
 };
