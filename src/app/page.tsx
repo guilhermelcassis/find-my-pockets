@@ -67,6 +67,8 @@ export default function Home() {
   const dropdownLockRef = useRef<boolean>(false);
   const mapRef = useRef<MapRef>(null);
   const isUserTypingRef = useRef<boolean>(false);
+  const [filteredGroups, setFilteredGroups] = useState<Group[]>([]);
+  const [mobileView, setMobileView] = useState<'map' | 'list'>('map');
 
   // Fetch all groups on initial load for the map
   useEffect(() => {
@@ -371,6 +373,41 @@ export default function Home() {
     
     return filteredGroups;
   };
+
+  // Function to apply day of week and other filters
+  const applyFilters = (groups: Group[]): Group[] => {
+    let result = groups;
+    
+    // Only include active groups
+    result = result.filter(group => group.active !== false);
+    
+    return result;
+  };
+
+  // Instead of using the useEffect for filtering, let's ensure the groups shown on the map are properly filtered
+  const getDisplayedGroups = useCallback((): Group[] => {
+    // Start with the base set of groups
+    const baseGroups = searchResults.length > 0 
+      ? searchResults 
+      : allGroups;
+    
+    // If user is typing, use previous results to avoid flickering
+    const groupsToFilter = isTyping
+      ? (prevSearchResults.current.length > 0 
+          ? prevSearchResults.current 
+          : baseGroups)
+      : baseGroups;
+    
+    // Apply active filter first
+    const activeGroups = groupsToFilter.filter(group => group.active !== false);
+    
+    // If we have explicitly filtered groups, use those
+    if (filteredGroups.length > 0 && !isTyping) {
+      return filteredGroups;
+    }
+    
+    return activeGroups;
+  }, [searchResults, allGroups, isTyping, filteredGroups]);
 
   // Function to sort search results by quantity (number of groups per location)
   const sortResultsByQuantity = (results: Group[]): Group[] => {
@@ -885,6 +922,42 @@ export default function Home() {
     };
   }, []);
 
+  // Add a useEffect to apply filters to the displayed groups
+  useEffect(() => {
+    // Set filtered groups to match search results (all active)
+    setFilteredGroups(searchResults.filter(group => group.active !== false));
+    
+    // Reset map view if needed
+    setTimeout(() => {
+      if (mapRef.current && searchResults.length > 0) {
+        mapRef.current.fitBoundsToMarkers();
+      }
+    }, 300);
+  }, [searchResults]);
+
+  // Add media query detection for mobile
+  useEffect(() => {
+    const checkMobileView = () => {
+      return window.innerWidth < 1024; // lg breakpoint in Tailwind
+    };
+    
+    // Set initial mobile state
+    if (checkMobileView()) {
+      setMobileView('map'); // Default to map on mobile
+    }
+    
+    // Update on resize
+    const handleResize = () => {
+      const isMobile = checkMobileView();
+      if (!isMobile) {
+        setMobileView('map'); // Reset to map when returning to desktop
+      }
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   return (
     <main className="min-h-screen p-4 flex flex-col">
       {/* Page title */}
@@ -1026,7 +1099,7 @@ export default function Home() {
                                 <div className={`w-8 h-8 flex-shrink-0 ${isSelected ? 'bg-blue-200' : 'bg-blue-100'} rounded-full flex items-center justify-center mr-3`}>
                                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path d="M12 14l9-5-9-5-9 5 9 5z" />
-                                    <path d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998a12.078 12.078 0 01.665-6.479L12 14z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998a12.078 12.078 0 01.665-6.479L12 14z" />
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14zm-4 6v-7.5l4-2.222" />
                                   </svg>
                                 </div>
@@ -1078,10 +1151,44 @@ export default function Home() {
         </form>
       </div>
       
-      {/* Main content: Results (30%) and Map (70%) - switched order */}
+      {/* Mobile View Toggle - only shown on small screens */}
+      <div className="lg:hidden mb-4 flex justify-center">
+        <div className="bg-gray-100 rounded-lg p-1 inline-flex">
+          <button
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+              mobileView === 'map' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500'
+            }`}
+            onClick={() => setMobileView('map')}
+          >
+            <span className="flex items-center gap-1">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+              </svg>
+              Mapa
+            </span>
+          </button>
+          <button
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+              mobileView === 'list' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500'
+            }`}
+            onClick={() => setMobileView('list')}
+          >
+            <span className="flex items-center gap-1">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+              </svg>
+              Lista
+            </span>
+          </button>
+        </div>
+      </div>
+      
+      {/* Main content: Results and Map - modified for mobile */}
       <div className="flex flex-col lg:flex-row gap-4 h-[calc(100vh-220px)] min-h-[500px] max-h-[800px] mb-4 flex-grow">
-        {/* Results section - 30% - now on the left */}
-        <div className="lg:w-[30%] h-full overflow-y-auto bg-white border rounded shadow-sm p-4" ref={resultsContainerRef}>
+        {/* Results section - hidden on mobile when map is showing */}
+        <div className={`lg:w-[30%] h-full overflow-y-auto bg-white border rounded shadow-sm p-4 ${
+          mobileView === 'list' ? 'block' : 'hidden lg:block'
+        }`} ref={resultsContainerRef}>
           {/* Display search results */}
           {searchResults.length > 0 ? (
             <div>
@@ -1239,19 +1346,40 @@ export default function Home() {
           )}
         </div>
         
-        {/* Map section - 70% - now on the right */}
-        <div className="lg:w-[70%] h-full overflow-hidden">
+        {/* Map section - hidden on mobile when list is showing */}
+        <div className={`lg:w-[70%] h-full overflow-hidden ${
+          mobileView === 'map' ? 'block' : 'hidden lg:block'
+        }`}>
           <div 
             ref={mapContainerRef}
             className="bg-white p-4 border rounded shadow-sm h-full flex flex-col"
           >
-            <div className="mb-3">
+            <div className="mb-3 flex justify-between items-center">
               <h2 className="text-xl font-semibold">
-              {searchResults.length > 0 
-                ? `Localizações nas Universidades (${searchResults.length})` 
-                : `Todas as Localizações (${allGroups.length})`}
+                {searchResults.length > 0 
+                  ? `Localizações nas Universidades (${searchResults.length})` 
+                  : `Todas as Localizações (${allGroups.length})`}
               </h2>
+              
+              {/* Map Controls - Remove filter buttons */}
+              <div className="flex gap-2">
+                <button 
+                  className="bg-white border border-gray-300 rounded px-3 py-1 text-sm flex items-center gap-1 hover:bg-gray-50 transition-colors"
+                  onClick={() => {
+                    if (mapRef.current) {
+                      mapRef.current.fitBoundsToMarkers();
+                    }
+                  }}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  Ver todos
+                </button>
+              </div>
             </div>
+            
+            {/* Remove filter panel section */}
             
             <div className="flex-grow relative" style={{ minHeight: "400px" }}>
               {isLoadingInitial ? (
@@ -1259,24 +1387,101 @@ export default function Home() {
                   <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
                 </div>
               ) : (
-                <MapComponent 
-                  key="persistent-map"
-                  ref={mapRef}
-                  groups={isTyping 
-                    ? (prevSearchResults.current.length > 0 ? prevSearchResults.current : allGroups).filter(group => group.active !== false)
-                    : (searchResults.length > 0
-                        ? searchResults 
-                        : allGroups).filter(group => group.active !== false)
-                  } 
-                  selectedGroupId={selectedGroupId}
-                  height="100%"
-                  onMarkerClick={handleMarkerClick}
-                />
+                <>
+                  {/* Location button with enhanced tooltip */}
+                  <button 
+                    className="absolute top-4 right-4 z-10 bg-white p-2 rounded-full shadow-md hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 group active:bg-blue-100"
+                    onClick={(e) => {
+                      // Pass the native event directly to maintain the user gesture context
+                      console.log("Location button clicked - requesting exact user location");
+                      // Clear any pending request state
+                      if (mapRef.current) {
+                        mapRef.current.getUserLocation();
+                      }
+                    }}
+                    title="Encontrar minha localização exata atual"
+                    aria-label="Encontrar minha localização exata atual"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    
+                    {/* Enhanced tooltip that appears on hover */}
+                    <div className="hidden group-hover:block absolute top-full right-0 mt-2 w-64 p-3 bg-white rounded-lg shadow-lg text-sm text-gray-700 z-50">
+                      <p className="font-medium mb-1">Mostrar minha localização exata</p>
+                      <p>Seu navegador pedirá permissão para acessar sua localização atual.</p>
+                      <p className="mt-1 text-xs text-gray-500">Se negada, você pode habilitar nas configurações do navegador.</p>
+                    </div>
+                  </button>
+                  
+                  <MapComponent 
+                    key="persistent-map"
+                    ref={mapRef}
+                    groups={getDisplayedGroups()}
+                    selectedGroupId={selectedGroupId}
+                    height="100%"
+                    onMarkerClick={handleMarkerClick}
+                    enableClustering={false}
+                  />
+                </>
               )}
             </div>
           </div>
         </div>
       </div>
+      
+      {/* Mobile navigation bar at the bottom */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg p-2 flex justify-around z-20">
+        <button 
+          className={`flex flex-col items-center p-2 rounded ${mobileView === 'map' ? 'text-blue-600' : 'text-gray-500'}`}
+          onClick={() => setMobileView('map')}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+          </svg>
+          <span className="text-xs mt-1">Mapa</span>
+        </button>
+        
+        <button 
+          className={`flex flex-col items-center p-2 rounded ${mobileView === 'list' ? 'text-blue-600' : 'text-gray-500'}`}
+          onClick={() => setMobileView('list')}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+          </svg>
+          <span className="text-xs mt-1">Lista</span>
+        </button>
+        
+        {/* Mobile location button with enhanced tooltip */}
+        <button 
+          className="flex flex-col items-center p-2 rounded text-gray-500 relative group active:text-blue-600 active:bg-blue-50"
+          onClick={(e) => {
+            // Pass the native event directly to maintain the user gesture context
+            console.log("Mobile location button clicked - requesting exact user location");
+            if (mapRef.current) {
+              mapRef.current.getUserLocation();
+              setMobileView('map'); // Switch to map view
+            }
+          }}
+          title="Encontrar minha localização exata atual"
+          aria-label="Encontrar minha localização exata atual"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <span className="text-xs mt-1">Localização</span>
+          
+          {/* Enhanced tooltip that appears on hover (mobile) */}
+          <div className="hidden group-hover:block absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-48 p-2 bg-white rounded-lg shadow-lg text-xs text-gray-700 z-50">
+            Mostrar minha localização exata atual
+          </div>
+        </button>
+      </div>
+      
+      {/* Add padding at the bottom on mobile to account for the nav bar */}
+      <div className="lg:hidden h-16"></div>
     </main>
   );
 }

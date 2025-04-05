@@ -9,6 +9,7 @@ export interface MapRef {
   showGroupDetails: (groupId: string) => void;
   zoomToGroup: (groupId: string) => void;
   clearMapClicks: () => void;
+  getUserLocation: () => Promise<void>;
 }
 
 interface MapProps {
@@ -19,6 +20,7 @@ interface MapProps {
   height?: string;
   selectedGroupId?: string | null;
   onMarkerClick?: (groupId: string) => void;
+  enableClustering?: boolean;
 }
 
 // Updated Google Maps type definitions including AdvancedMarkerElement
@@ -98,7 +100,8 @@ const Map = forwardRef<MapRef, MapProps>(({
   zoom = 6,
   height = '500px',
   selectedGroupId = null,
-  onMarkerClick
+  onMarkerClick,
+  enableClustering = false
 }, ref) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<google.maps.Map | null>(null);
@@ -133,6 +136,16 @@ const Map = forwardRef<MapRef, MapProps>(({
 
   // Add another ref to persistently track which markers were selected via map clicks
   const markerClickIdsRef = useRef<Set<string>>(new Set());
+
+  // Add state for user location
+  const [userLocation, setUserLocation] = useState<google.maps.Marker | google.maps.marker.AdvancedMarkerElement | null>(null);
+  const [userLocationError, setUserLocationError] = useState<string | null>(null);
+
+  // Removed showLegend state
+  const [showClustering, setShowClustering] = useState<boolean>(false); // Changed from enableClustering to false directly
+
+  // Add a flag to track if we've tried requesting location
+  const [hasTriedLocationRequest, setHasTriedLocationRequest] = useState(false);
 
   // Initialize map function (called after Google Maps is loaded)
   const initializeMap = useCallback(() => {
@@ -1002,6 +1015,8 @@ const Map = forwardRef<MapRef, MapProps>(({
           map.setZoom(zoom);
         }
       }
+
+      // Clustering logic has been removed
     } catch (error) {
       console.error("Error adding markers to map:", error);
     } finally {
@@ -1179,6 +1194,205 @@ const Map = forwardRef<MapRef, MapProps>(({
     }
   }, [map, isMapReady]);
 
+  // Update getUserLocation to not use the removed state variables
+  const getUserLocation = useCallback(async () => {
+    if (!map || !isMapReady) {
+      console.log('Map not ready, cannot get user location');
+      return;
+    }
+
+    try {
+      // Remove any existing user location marker
+      if (userLocation) {
+        if (userLocation instanceof google.maps.Marker) {
+          userLocation.setMap(null);
+        } else {
+          userLocation.map = null;
+        }
+        setUserLocation(null);
+      }
+
+      // Reset error state
+      setUserLocationError(null);
+      
+      // Show "Requesting location..." message to indicate we're trying to get permission
+      setUserLocationError("Solicitando acesso à localização...");
+      
+      // Mark that we've tried requesting location
+      setHasTriedLocationRequest(true);
+      
+      // Store current map state before making any changes
+      const currentZoom = map.getZoom();
+      const currentCenter = map.getCenter();
+      
+      console.log("Requesting user location...");
+      
+      // IMPORTANT: The key change is to make this a direct, synchronous call
+      // immediately after the user's click - no async/await here to break the chain
+      navigator.geolocation.getCurrentPosition(
+        // Success handler
+        (position) => {
+          console.log("Location permission granted, position received", {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy
+          });
+          
+          // Clear the requesting message
+          setUserLocationError(null);
+          
+          const userPosition = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          };
+          
+          // First center on the user location immediately - this ensures the user sees their location right away
+          map.setCenter(userPosition);
+          map.setZoom(15); // Zoom in to user location at a reasonable level
+          
+          // Create user location marker
+          let userMarker: google.maps.Marker | google.maps.marker.AdvancedMarkerElement | null = null;
+          
+          if (supportsAdvancedMarkers && window.google.maps.marker?.AdvancedMarkerElement) {
+            // Create advanced marker for user location - make it more visible and distinctive
+            const container = document.createElement('div');
+            container.className = 'user-location-marker';
+            container.innerHTML = `
+              <div style="
+                position: relative;
+                width: 36px;
+                height: 36px;
+                z-index: 1001;
+              ">
+                <div style="
+                  position: absolute;
+                  top: 0;
+                  left: 0;
+                  width: 36px;
+                  height: 36px;
+                  background-color: rgba(30, 144, 255, 0.3);
+                  border-radius: 50%;
+                  animation: pulse 2s infinite;
+                "></div>
+                <div style="
+                  position: absolute;
+                  top: 8px;
+                  left: 8px;
+                  width: 20px;
+                  height: 20px;
+                  background-color: #1E90FF;
+                  border: 3px solid white;
+                  border-radius: 50%;
+                  z-index: 1002;
+                  box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+                "></div>
+              </div>
+              <style>
+                @keyframes pulse {
+                  0% { transform: scale(1); opacity: 1; }
+                  50% { transform: scale(2.5); opacity: 0.3; }
+                  100% { transform: scale(1); opacity: 1; }
+                }
+              </style>
+            `;
+            
+            userMarker = new window.google.maps.marker.AdvancedMarkerElement({
+              position: userPosition,
+              map,
+              content: container,
+              title: "Sua Localização Atual",
+              zIndex: 1000
+            });
+          } else {
+            // Fallback to legacy marker - also make it more distinctive
+            userMarker = new window.google.maps.Marker({
+              position: userPosition,
+              map,
+              icon: {
+                path: window.google.maps.SymbolPath.CIRCLE,
+                fillColor: '#1E90FF',
+                fillOpacity: 1,
+                strokeColor: 'white',
+                strokeWeight: 3,
+                scale: 10
+              },
+              title: "Sua Localização Atual",
+              zIndex: 1000
+            });
+            
+            // Add a circle for the accuracy radius
+            new window.google.maps.Circle({
+              map,
+              center: userPosition,
+              radius: position.coords.accuracy,
+              fillColor: '#1E90FF',
+              fillOpacity: 0.15,
+              strokeColor: '#1E90FF',
+              strokeOpacity: 0.3,
+              strokeWeight: 1
+            });
+          }
+          
+          setUserLocation(userMarker);
+          
+          // We're not showing any confirmation dialog and we're keeping the map
+          // centered on the user's location without trying to show all markers
+          console.log("Map is now centered on user's exact location");
+        },
+        // Error handler
+        (error) => {
+          console.error("Geolocation error:", error);
+          
+          // Clear the requesting message
+          setUserLocationError(null);
+          
+          // If there was an error, restore the previous map view
+          if (currentCenter && currentZoom) {
+            map.setCenter(currentCenter);
+            map.setZoom(currentZoom);
+          }
+          
+          if (error.code === error.PERMISSION_DENIED) {
+            console.log("User denied geolocation permission");
+            
+            // Check if this is likely a permanent block
+            const isChrome = navigator.userAgent.indexOf("Chrome") > -1;
+            
+            if (isChrome) {
+              // Show helpful message for Chrome users
+              setUserLocationError(
+                "Permissão de localização bloqueada. Para ativar, clique no ícone do cadeado na barra de endereço do navegador, depois em 'Configurações do site' e mude a permissão de localização para 'Permitir'."
+              );
+            } else {
+              // Generic message for other browsers
+              setUserLocationError(
+                "Acesso à localização negado. Por favor, permita o acesso à sua localização nas configurações do navegador."
+              );
+            }
+          } else if (error.code === error.POSITION_UNAVAILABLE) {
+            setUserLocationError("Informações de localização indisponíveis. Verifique as configurações do seu dispositivo.");
+          } else if (error.code === error.TIMEOUT) {
+            setUserLocationError("Tempo de solicitação esgotado. Tente novamente.");
+          } else {
+            setUserLocationError("Ocorreu um erro ao obter a localização.");
+          }
+        },
+        // Options
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        }
+      );
+      
+    } catch (error) {
+      console.error("Error in getUserLocation:", error);
+      
+      // Show a generic error message
+      setUserLocationError("Ocorreu um erro ao tentar acessar sua localização.");
+    }
+  }, [map, isMapReady, userLocation, supportsAdvancedMarkers]);
+
   // Expose methods to parent component
   useImperativeHandle(ref, () => ({
     fitBoundsToMarkers,
@@ -1274,10 +1488,11 @@ const Map = forwardRef<MapRef, MapProps>(({
     clearMapClicks: () => {
       console.log('Clearing map clicked markers');
       markerClickIdsRef.current.clear();
-    }
-  }), [groups, map, infoWindow, markersRef, onMarkerClick, generateInfoWindowContent, fitBoundsToMarkers]);
+    },
+    getUserLocation
+  }), [groups, map, infoWindow, markersRef, onMarkerClick, generateInfoWindowContent, fitBoundsToMarkers, getUserLocation]);
 
-  // Adjust return to ensure map container has proper dimensions
+  // Adjust return to ensure map container has proper dimensions and add permissions modal
   return (
     <div className="relative w-full h-full">
       {/* Add global styles for InfoWindow */}
@@ -1317,6 +1532,26 @@ const Map = forwardRef<MapRef, MapProps>(({
         .gm-ui-hover-effect:hover {
           opacity: 1 !important;
         }
+
+        /* User location marker pulse animation */
+        @keyframes user-location-pulse {
+          0% {
+            transform: scale(1);
+            opacity: 1;
+          }
+          50% {
+            transform: scale(1.5);
+            opacity: 0.4;
+          }
+          100% {
+            transform: scale(1);
+            opacity: 1;
+          }
+        }
+
+        .user-location-marker-pulse {
+          animation: user-location-pulse 2s infinite;
+        }
       `}</style>
       
       {/* Map container with fallback background color */}
@@ -1329,6 +1564,35 @@ const Map = forwardRef<MapRef, MapProps>(({
           position: 'relative',
         }}
       ></div>
+      
+      {/* Map Legend and Legend toggle removed */}
+      
+      {/* User location error message with improved visibility for permission errors */}
+      {userLocationError && (
+        <div className="absolute bottom-4 left-4 right-4 bg-white border-2 border-blue-300 text-gray-800 p-4 rounded-lg shadow-md flex justify-between items-center">
+          <div className="flex-grow">
+            <p className="font-medium">Acesso à localização</p>
+            <p className="mt-1">{userLocationError}</p>
+            {userLocationError.includes("bloqueada") && (
+              <div className="mt-2 flex space-x-2">
+                <img 
+                  src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM0QjVERkYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMTIgMjJzLTgtNC44LTgtMTJhOCA4IDAgMCAxIDgtOCA4IDggMCAwIDEgOCA4YzAgNy4yLTggMTItOCAxMnoiPjwvcGF0aD48Y2lyY2xlIGN4PSIxMiIgY3k9IjEwIiByPSIzIj48L2NpcmNsZT48L3N2Zz4="
+                  alt="Location icon"
+                  className="w-6 h-6"
+                />
+                <p className="text-xs text-gray-600">Procure pelo ícone do cadeado na barra de endereço</p>
+              </div>
+            )}
+          </div>
+          <button
+            className="text-gray-600 hover:text-gray-800 ml-2 p-1 rounded"
+            onClick={() => setUserLocationError(null)}
+            aria-label="Fechar mensagem de erro"
+          >
+            ×
+          </button>
+        </div>
+      )}
       
       {/* Error message overlay */}
       {loadError && (
