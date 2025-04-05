@@ -1,7 +1,15 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { Group } from '../lib/interfaces';
+
+// Export interface to define the map ref methods
+export interface MapRef {
+  fitBoundsToMarkers: () => void;
+  showGroupDetails: (groupId: string) => void;
+  zoomToGroup: (groupId: string) => void;
+  clearMapClicks: () => void;
+}
 
 interface MapProps {
   groups: Group[];
@@ -46,6 +54,8 @@ declare global {
       loading: boolean;
       callbacks: Array<() => void>;
     };
+    // Add property to track if user is typing to prevent focus stealing
+    isUserTyping?: boolean;
   }
 }
 
@@ -80,7 +90,8 @@ interface GoogleMapOptions {
   mapId?: string;
 }
 
-const Map = ({ 
+// Convert to forwardRef to expose methods to parent
+const Map = forwardRef<MapRef, MapProps>(({ 
   groups, 
   centerLat = -24.64970962763454, 
   centerLng = -47.8806330986609, 
@@ -88,7 +99,7 @@ const Map = ({
   height = '500px',
   selectedGroupId = null,
   onMarkerClick
-}: MapProps) => {
+}, ref) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<google.maps.Map | null>(null);
   // Update type to handle both legacy and advanced markers
@@ -113,6 +124,15 @@ const Map = ({
   const componentMountedRef = useRef<boolean>(false);
   // Store previous group IDs to prevent unnecessary redraws
   const prevGroupIds = useRef<string>('');
+
+  // Add a ref to track whether the marker was selected from the map or the list
+  const selectedFromMapRef = useRef<boolean>(false);
+
+  // Add a new ref to track the last group ID we've centered on
+  const lastCenteredGroupIdRef = useRef<string | null>(null);
+
+  // Add another ref to persistently track which markers were selected via map clicks
+  const markerClickIdsRef = useRef<Set<string>>(new Set());
 
   // Initialize map function (called after Google Maps is loaded)
   const initializeMap = useCallback(() => {
@@ -395,7 +415,7 @@ const Map = ({
       if (!window.google.maps.marker || !window.google.maps.marker.AdvancedMarkerElement) {
         return null;
       }
-
+      
       // Create marker element with proper styling
       const markerSize = isSelected ? 40 : 32; // Make selected markers larger
       const markerColor = isSelected ? '#2563eb' : '#3b82f6'; // Use a darker blue for selected
@@ -427,7 +447,7 @@ const Map = ({
             font-family: Arial, sans-serif;
           ">
             ${group.university.charAt(0)}
-          </div>
+        </div>
         </div>
         ${isSelected ? '<div class="marker-pulse"></div>' : ''}
       `;
@@ -476,7 +496,7 @@ const Map = ({
       if (markerElement) {
         markerElement.addEventListener('mouseenter', () => {
           markerElement.style.transform = 'rotate(-45deg) scale(1.1)';
-          markerElement.style.boxShadow = '0 4px 12px rgba(37, 99, 235, 0.6)';
+          markerElement.style.boxShadow = shadowSize;
         });
         
         markerElement.addEventListener('mouseleave', () => {
@@ -487,9 +507,9 @@ const Map = ({
 
       // Create the advanced marker with our styled element
       const marker = new window.google.maps.marker.AdvancedMarkerElement({
-        position: {
-          lat: group.coordinates.latitude,
-          lng: group.coordinates.longitude
+        position: { 
+          lat: group.coordinates.latitude, 
+          lng: group.coordinates.longitude 
         },
         map,
         content: container,
@@ -508,7 +528,7 @@ const Map = ({
 
       // Don't add the click event listener here, as it will be added later
       // when all markers are processed
-
+      
       return marker;
     } catch (error) {
       console.error('Error creating advanced marker:', error);
@@ -525,9 +545,9 @@ const Map = ({
     try {
       // Create a marker with legacy API
       const marker = new window.google.maps.Marker({
-        position: {
-          lat: group.coordinates.latitude,
-          lng: group.coordinates.longitude
+        position: { 
+          lat: group.coordinates.latitude, 
+          lng: group.coordinates.longitude 
         },
         map,
         title: group.name,
@@ -556,7 +576,7 @@ const Map = ({
           marker.setAnimation(null);
         }, 1500); // Stop bouncing after 1.5 seconds
       }
-
+      
       return marker;
     } catch (error) {
       console.error('Error creating legacy marker:', error);
@@ -717,7 +737,7 @@ const Map = ({
     }
     
     console.log("Drawing markers - group IDs have changed");
-
+    
     // Update the reference for next comparison
     prevGroupIds.current = currentGroupIds;
     
@@ -783,11 +803,11 @@ const Map = ({
       
       if (selectedGroup) {
         console.log('Selected group found:', selectedGroup.university, 
-                  'ID:', selectedGroup.id,
-                  'Coordinates:', selectedGroup.coordinates.latitude, selectedGroup.coordinates.longitude);
+                   'ID:', selectedGroup.id,
+                   'Coordinates:', selectedGroup.coordinates.latitude, selectedGroup.coordinates.longitude);
       } else if (selectedGroupId) {
         console.log('Selected group NOT found. Looking for ID:', selectedGroupId, 
-                  'Available IDs:', validGroups.map(g => g.id).join(', '));
+                   'Available IDs:', validGroups.map(g => g.id).join(', '));
       }
 
       // Create new arrays to store markers
@@ -829,6 +849,12 @@ const Map = ({
             marker.addListener('click', () => {
               console.log('Legacy marker clicked for group:', group.id, group.university);
               
+              // Flag that this was selected from the map
+              selectedFromMapRef.current = true;
+              
+              // Also add the ID to our persistent set of markers selected via map clicks
+              markerClickIdsRef.current.add(group.id);
+              
               // First set the info window directly without triggering a full redraw
               infoWindow.close();
               
@@ -839,17 +865,7 @@ const Map = ({
               // Open the info window
               infoWindow.open(map, marker);
               
-              // Check if map exists before using its methods
-              if (map) {
-                // Center map on this marker with a smooth animation
-                map.panTo(marker.getPosition() as google.maps.LatLng);
-                
-                // Set zoom only if current zoom is too low
-                const currentZoom = map.getZoom();
-                if (typeof currentZoom === 'number' && currentZoom < 14) {
-                  map.setZoom(14);
-                }
-              }
+              // DO NOT center the map or change zoom - just show the info window
               
               // Only call the onMarkerClick callback at the very end
               // This will update selectedGroupId in the parent component
@@ -870,6 +886,12 @@ const Map = ({
             marker.addListener('click', () => {
               console.log('Advanced marker clicked for group:', group.id, group.university);
               
+              // Flag that this was selected from the map
+              selectedFromMapRef.current = true;
+              
+              // Also add the ID to our persistent set of markers selected via map clicks
+              markerClickIdsRef.current.add(group.id);
+              
               // First set the info window directly without triggering a full redraw
               infoWindow.close();
               
@@ -877,18 +899,11 @@ const Map = ({
               const content = generateInfoWindowContent(group);
               infoWindow.setContent(content);
               
-              // Position and open the info window
+              // Position and open the info window WITHOUT changing map center or zoom
               infoWindow.setPosition(position);
               infoWindow.open(map);
               
-              // Also center on this marker when clicked
-              map.panTo(position);
-              
-              // Set appropriate zoom level
-              const currentZoom = map.getZoom();
-              if (typeof currentZoom === 'number' && currentZoom < 14) {
-                map.setZoom(14);
-              }
+              // DO NOT center the map or change zoom - just show the info window
               
               // Add visual feedback - temporarily highlight the marker
               if (marker.content) {
@@ -1016,19 +1031,44 @@ const Map = ({
     if (selectedGroup && marker) {
       console.log('Handling selected marker for:', selectedGroup.university, 'without full redraw');
       
-      // Center the map on the selected group
+      // Prepare position for info window
       const position = {
         lat: selectedGroup.coordinates.latitude,
         lng: selectedGroup.coordinates.longitude
       };
       
-      // Center the map without forcing a full marker redraw
-      map.setCenter(position);
-      map.setZoom(15);
+      // Only zoom and center if:
+      // 1. NOT selected directly from the map (using both the flag and our persistent set)
+      // 2. AND this is a different group than the last one we centered on
+      const wasClickedOnMap = selectedFromMapRef.current || 
+        (selectedGroupId ? markerClickIdsRef.current.has(selectedGroupId) : false);
+      
+      // Skip map updating completely if the user is currently typing
+      // This prevents map operations from stealing focus from the search input
+      if (window.isUserTyping === true) {
+        console.log('Skipping map update completely - user is currently typing');
+        return;
+      }
+      
+      if (!wasClickedOnMap && selectedGroupId !== lastCenteredGroupIdRef.current) {
+        console.log('Centering map - selection was NOT from map click and is a different group');
+        // Center the map without forcing a full marker redraw
+        map.setCenter(position);
+        map.setZoom(15);
+        
+        // Update the last centered group ID
+        lastCenteredGroupIdRef.current = selectedGroupId;
+      } else {
+        if (wasClickedOnMap) {
+          console.log('Skipping map centering - selection was from map click');
+        } else {
+          console.log('Skipping map centering - same group ID as last centered');
+        }
+      }
       
       // Generate info window content using our helper function
       const content = generateInfoWindowContent(selectedGroup);
-      
+        
       // Open info window on the marker
       infoWindow.setContent(content);
       
@@ -1039,6 +1079,9 @@ const Map = ({
         infoWindow.setPosition(position);
         infoWindow.open(map);
       }
+      
+      // Reset the flag after handling this selection
+      selectedFromMapRef.current = false;
     } else if (selectedGroupId) {
       console.warn('Selected group or marker not found for ID:', selectedGroupId);
     }
@@ -1079,6 +1122,158 @@ const Map = ({
     backgroundSize: '1000px 100%',
     animation: 'pulse 1.5s ease-in-out infinite, shimmer 2s infinite linear',
   };
+
+  // Function to fit bounds to all markers
+  const fitBoundsToMarkers = useCallback(() => {
+    if (!map || !isMapReady || Object.keys(markersRef.current).length === 0) {
+      console.log("Cannot fit bounds - map not ready or no markers");
+      return;
+    }
+
+    try {
+      console.log("Fitting bounds to show all markers");
+      const bounds = new window.google.maps.LatLngBounds();
+      
+      // Add all marker positions to the bounds
+      Object.values(markersRef.current).forEach(marker => {
+        let position;
+        
+        if (marker instanceof google.maps.Marker) {
+          position = marker.getPosition();
+        } else {
+          // For AdvancedMarkerElement, get position differently
+          const pos = marker.position as unknown as { lat: number, lng: number };
+          if (pos && pos.lat && pos.lng) {
+            position = new window.google.maps.LatLng(pos.lat, pos.lng);
+          }
+        }
+        
+        if (position) {
+          bounds.extend(position);
+        }
+      });
+      
+      // Check if bounds are valid (not empty)
+      if (bounds.isEmpty()) {
+        console.warn("No valid marker positions to fit bounds");
+        return;
+      }
+      
+      // Apply bounds with padding
+      map.fitBounds(bounds, 40);
+      
+      // Don't zoom in too far
+      const zoomChangedListener = google.maps.event.addListener(map, 'idle', () => {
+        const currentZoom = map.getZoom();
+        if (currentZoom !== undefined && currentZoom > 15) {
+          map.setZoom(15);
+        }
+        google.maps.event.removeListener(zoomChangedListener);
+      });
+      
+      console.log("Map bounds fitted to markers");
+    } catch (error) {
+      console.error("Error fitting bounds to markers:", error);
+    }
+  }, [map, isMapReady]);
+
+  // Expose methods to parent component
+  useImperativeHandle(ref, () => ({
+    fitBoundsToMarkers,
+    showGroupDetails: (groupId: string) => {
+      // Find the group
+      const group = groups.find(g => g.id === groupId);
+      if (!group || !map) {
+        console.log('Cannot show details: map not initialized or group not found');
+        return;
+      }
+      
+      // Find the marker for this group
+      const marker = markersRef.current[groupId];
+      if (!marker) {
+        console.log('Cannot show details: marker not found for group', groupId);
+        return;
+      }
+      
+      // Skip if info window is not available
+      if (!infoWindow) {
+        console.log('Cannot show details: infoWindow is not initialized');
+        return;
+      }
+      
+      // Set flags to indicate this was NOT selected from the map
+      selectedFromMapRef.current = false;
+      lastCenteredGroupIdRef.current = groupId; // Prevent re-centering on future selectedGroupId updates
+      
+      // If this is called from the list, remove the ID from the set of map-clicked markers
+      markerClickIdsRef.current.delete(groupId);
+      
+      // Close any open info windows first
+      infoWindow.close();
+      
+      // Generate the info window content
+      const content = generateInfoWindowContent(group);
+      infoWindow.setContent(content);
+      
+      // Open the info window without changing map center or zoom
+      if (marker instanceof google.maps.Marker) {
+        infoWindow.open(map, marker);
+      } else {
+        // For advanced marker
+        const position = {
+          lat: group.coordinates.latitude,
+          lng: group.coordinates.longitude
+        };
+        infoWindow.setPosition(position);
+        infoWindow.open(map);
+      }
+      
+      // Notify parent component about the marker click (without zooming)
+      if (onMarkerClick) {
+        onMarkerClick(groupId);
+      }
+      
+      console.log(`Showing details for group ${groupId} without zooming`);
+    },
+    zoomToGroup: (groupId: string) => {
+      // Find the group
+      const group = groups.find(g => g.id === groupId);
+      if (!group || !map) {
+        console.log('Cannot zoom to group: map not initialized or group not found');
+        return;
+      }
+
+      // Check that coordinates exist
+      if (!group.coordinates || !group.coordinates.latitude || !group.coordinates.longitude) {
+        console.log('Cannot zoom to group: invalid coordinates');
+        return;
+      }
+
+      // Flag that this is a deliberate zoom action (not from map click)
+      selectedFromMapRef.current = false;
+      
+      // Update the last centered group ID to prevent re-centering in the selectedGroupId effect
+      lastCenteredGroupIdRef.current = groupId;
+      
+      // Remove from map-clicked markers since this was called from the list view
+      markerClickIdsRef.current.delete(groupId);
+
+      // Create position object
+      const position = {
+        lat: group.coordinates.latitude,
+        lng: group.coordinates.longitude
+      };
+
+      // Animate zoom to position
+      console.log(`Zooming to group ${groupId}: ${group.university}`);
+      map.panTo(position);
+      map.setZoom(15); // Set appropriate zoom level
+    },
+    clearMapClicks: () => {
+      console.log('Clearing map clicked markers');
+      markerClickIdsRef.current.clear();
+    }
+  }), [groups, map, infoWindow, markersRef, onMarkerClick, generateInfoWindowContent, fitBoundsToMarkers]);
 
   // Adjust return to ensure map container has proper dimensions
   return (
@@ -1140,16 +1335,16 @@ const Map = ({
         >
           <div className="text-red-600 font-semibold text-lg mb-3">
             {loadError}
-          </div>
-          <button
-            onClick={() => window.location.reload()}
+            </div>
+            <button 
+              onClick={() => window.location.reload()} 
             className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
-          >
+            >
             Reload Page
-          </button>
+            </button>
         </div>
       )}
-
+      
       {/* Loading indicator */}
       {!isMapReady && !loadError && (
         <div className="absolute inset-0 bg-gray-100 bg-opacity-75 flex items-center justify-center z-40 rounded-lg">
@@ -1161,6 +1356,6 @@ const Map = ({
       )}
     </div>
   );
-};
+});
 
 export default Map; 
