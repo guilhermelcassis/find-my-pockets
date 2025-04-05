@@ -1202,6 +1202,33 @@ const Map = forwardRef<MapRef, MapProps>(({
     }
 
     try {
+      console.log('----- GETTING USER LOCATION - CLEARING ALL UNIVERSITY SELECTIONS -----');
+
+      // 1. AGGRESSIVELY CLEAR ALL REFERENCES TO SELECTED UNIVERSITIES
+      
+      // Close any open info windows immediately
+      if (infoWindow) {
+        infoWindow.close();
+      }
+      
+      // Clear the map-clicked markers set
+      markerClickIdsRef.current.clear();
+      
+      // Clear the last centered group ID
+      lastCenteredGroupIdRef.current = null;
+      
+      // Reset the selected from map flag
+      selectedFromMapRef.current = false;
+      
+      // Tell the parent component to clear its selected group ID IMMEDIATELY
+      // This is crucial to prevent the parent from restoring the selected university
+      if (onMarkerClick) {
+        console.log("Clearing selected university in parent component");
+        onMarkerClick(null as any);
+      }
+      
+      // 2. CLEAR ANY EXISTING USER LOCATION MARKER
+      
       // Remove any existing user location marker
       if (userLocation) {
         if (userLocation instanceof google.maps.Marker) {
@@ -1212,23 +1239,20 @@ const Map = forwardRef<MapRef, MapProps>(({
         setUserLocation(null);
       }
 
+      // 3. UPDATE UI STATE
+      
       // Reset error state
       setUserLocationError(null);
       
-      // Show "Requesting location..." message to indicate we're trying to get permission
+      // Show "Requesting location..." message
       setUserLocationError("Solicitando acesso à localização...");
       
       // Mark that we've tried requesting location
       setHasTriedLocationRequest(true);
       
-      // Store current map state before making any changes
-      const currentZoom = map.getZoom();
-      const currentCenter = map.getCenter();
-      
       console.log("Requesting user location...");
       
-      // IMPORTANT: The key change is to make this a direct, synchronous call
-      // immediately after the user's click - no async/await here to break the chain
+      // 4. GET USER LOCATION (direct synchronous call to maintain user gesture)
       navigator.geolocation.getCurrentPosition(
         // Success handler
         (position) => {
@@ -1246,9 +1270,9 @@ const Map = forwardRef<MapRef, MapProps>(({
             lng: position.coords.longitude
           };
           
-          // First center on the user location immediately - this ensures the user sees their location right away
+          // CRITICAL: IMMEDIATELY center map on user location before any other operations
           map.setCenter(userPosition);
-          map.setZoom(15); // Zoom in to user location at a reasonable level
+          map.setZoom(15);
           
           // Create user location marker
           let userMarker: google.maps.Marker | google.maps.marker.AdvancedMarkerElement | null = null;
@@ -1260,24 +1284,24 @@ const Map = forwardRef<MapRef, MapProps>(({
             container.innerHTML = `
               <div style="
                 position: relative;
-                width: 36px;
-                height: 36px;
+                width: 42px;
+                height: 42px;
                 z-index: 1001;
               ">
                 <div style="
                   position: absolute;
                   top: 0;
                   left: 0;
-                  width: 36px;
-                  height: 36px;
+                  width: 42px;
+                  height: 42px;
                   background-color: rgba(30, 144, 255, 0.3);
                   border-radius: 50%;
                   animation: pulse 2s infinite;
                 "></div>
                 <div style="
                   position: absolute;
-                  top: 8px;
-                  left: 8px;
+                  top: 11px;
+                  left: 11px;
                   width: 20px;
                   height: 20px;
                   background-color: #1E90FF;
@@ -1301,7 +1325,7 @@ const Map = forwardRef<MapRef, MapProps>(({
               map,
               content: container,
               title: "Sua Localização Atual",
-              zIndex: 1000
+              zIndex: 9999 // Very high z-index to ensure it's above everything else
             });
           } else {
             // Fallback to legacy marker - also make it more distinctive
@@ -1314,10 +1338,10 @@ const Map = forwardRef<MapRef, MapProps>(({
                 fillOpacity: 1,
                 strokeColor: 'white',
                 strokeWeight: 3,
-                scale: 10
+                scale: 12
               },
               title: "Sua Localização Atual",
-              zIndex: 1000
+              zIndex: 9999
             });
             
             // Add a circle for the accuracy radius
@@ -1329,14 +1353,75 @@ const Map = forwardRef<MapRef, MapProps>(({
               fillOpacity: 0.15,
               strokeColor: '#1E90FF',
               strokeOpacity: 0.3,
-              strokeWeight: 1
+              strokeWeight: 1,
+              zIndex: 9998
             });
           }
           
           setUserLocation(userMarker);
           
-          // We're not showing any confirmation dialog and we're keeping the map
-          // centered on the user's location without trying to show all markers
+          // 5. APPLY MULTIPLE SAFEGUARDS TO PREVENT MAP FROM RETURNING TO UNIVERSITY
+          
+          // Clear any queued operations by using setTimeout with 0 delay
+          setTimeout(() => {
+            // CRITICAL SAFEGUARD: Check if any university was selected in the parent
+            if (onMarkerClick) {
+              onMarkerClick(null as any);
+            }
+            
+            // Re-clear all the internal state that might keep track of universities
+            markerClickIdsRef.current.clear();
+            lastCenteredGroupIdRef.current = null;
+            selectedFromMapRef.current = false;
+          }, 0);
+          
+          // First recenter after a small delay
+          setTimeout(() => {
+            console.log("First recenter safeguard");
+            map.setCenter(userPosition);
+            
+            // Close any info windows that might have re-opened
+            if (infoWindow) {
+              infoWindow.close();
+            }
+          }, 100);
+          
+          // Second recenter with a longer delay (in case any other operations tried to change the center)
+          setTimeout(() => {
+            console.log("Second recenter safeguard");
+            map.setCenter(userPosition);
+            
+            // Extra check to ensure no university is selected in parent
+            if (onMarkerClick) {
+              onMarkerClick(null as any);
+            }
+          }, 500);
+          
+          // Final center check with even longer delay
+          setTimeout(() => {
+            console.log("Final position check");
+            const currentCenter = map.getCenter();
+            if (currentCenter) {
+              const centerLat = currentCenter.lat();
+              const centerLng = currentCenter.lng();
+              
+              // If the map has moved away from user position, force it back
+              const distance = getDistanceInMeters(
+                centerLat, centerLng, 
+                userPosition.lat, userPosition.lng
+              );
+              
+              if (distance > 100) { // If map has moved more than 100 meters from user position
+                console.log("Map moved away from user location, forcing back", {
+                  current: { lat: centerLat, lng: centerLng },
+                  user: userPosition,
+                  distance
+                });
+                map.setCenter(userPosition);
+              }
+            }
+          }, 1000);
+          
           console.log("Map is now centered on user's exact location");
         },
         // Error handler
@@ -1345,12 +1430,6 @@ const Map = forwardRef<MapRef, MapProps>(({
           
           // Clear the requesting message
           setUserLocationError(null);
-          
-          // If there was an error, restore the previous map view
-          if (currentCenter && currentZoom) {
-            map.setCenter(currentCenter);
-            map.setZoom(currentZoom);
-          }
           
           if (error.code === error.PERMISSION_DENIED) {
             console.log("User denied geolocation permission");
@@ -1391,7 +1470,23 @@ const Map = forwardRef<MapRef, MapProps>(({
       // Show a generic error message
       setUserLocationError("Ocorreu um erro ao tentar acessar sua localização.");
     }
-  }, [map, isMapReady, userLocation, supportsAdvancedMarkers]);
+  }, [map, isMapReady, userLocation, supportsAdvancedMarkers, infoWindow, onMarkerClick]);
+
+  // Helper function to calculate distance between two coordinates in meters
+  const getDistanceInMeters = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 6371e3; // Earth's radius in meters
+    const φ1 = lat1 * Math.PI/180;
+    const φ2 = lat2 * Math.PI/180;
+    const Δφ = (lat2-lat1) * Math.PI/180;
+    const Δλ = (lon2-lon1) * Math.PI/180;
+
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+    return R * c;
+  };
 
   // Expose methods to parent component
   useImperativeHandle(ref, () => ({

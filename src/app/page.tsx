@@ -460,6 +460,13 @@ export default function Home() {
       return;
     }
     
+    // Handle null or undefined groupId (from location button) by clearing selection
+    if (!groupId) {
+      console.log('Clearing selected group (null/undefined groupId received)');
+      setSelectedGroupId(null);
+      return;
+    }
+    
     console.log(`Marker clicked on map for group ${groupId}`);
     setSelectedGroupId(groupId);
     
