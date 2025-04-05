@@ -513,7 +513,7 @@ const Map = forwardRef<MapRef, MapProps>(({
         },
         map,
         content: container,
-        title: group.name,
+        title: group.university,
         zIndex: isSelected ? 1000 : 100, // Put selected markers on top
         gmpClickable: true, // Explicitly make the marker clickable for accessibility
         gmpDraggable: false
@@ -522,7 +522,7 @@ const Map = forwardRef<MapRef, MapProps>(({
       // For accessibility, add tooltip
       if (marker.element) {
         marker.element.setAttribute('role', 'button');
-        marker.element.setAttribute('aria-label', `${group.name} - ${group.university} in ${group.city}`);
+        marker.element.setAttribute('aria-label', `${group.university} in ${group.city}`);
         marker.element.setAttribute('tabindex', '0');
       }
 
@@ -550,7 +550,7 @@ const Map = forwardRef<MapRef, MapProps>(({
           lng: group.coordinates.longitude 
         },
         map,
-        title: group.name,
+        title: group.university,
         cursor: 'pointer',
         zIndex: isSelected ? 1000 : 100, // Selected markers above others
         animation: isSelected ? window.google.maps.Animation.BOUNCE : null,
