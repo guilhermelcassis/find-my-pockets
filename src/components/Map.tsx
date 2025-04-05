@@ -627,9 +627,12 @@ const Map = forwardRef<MapRef, MapProps>(({
             padding-bottom: 8px;
           }
           .university {
-            font-weight: 600;
-            color: #4285f4;
-            margin-bottom: 6px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #1a73e8;
+            margin-bottom: 8px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 8px;
           }
           .info-section {
             margin-bottom: 6px;
@@ -685,7 +688,6 @@ const Map = forwardRef<MapRef, MapProps>(({
             font-size: 12px;
           }
         </style>
-        <div class="group-name">${group.name || 'Unnamed Group'}</div>
         <div class="university">${group.university || 'Independent Group'}</div>
         
         <div class="info-section">
