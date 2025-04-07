@@ -21,6 +21,13 @@ export default function LeadersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [filterActive, setFilterActive] = useState<'all' | 'active' | 'inactive'>('active');
 
+  // Function to capitalize first letter of each word in a name
+  const capitalizeName = (name: string): string => {
+    return name.trim().split(' ').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+    ).join(' ');
+  };
+
   // Fetch leaders on component mount or when filter changes
   useEffect(() => {
     fetchLeaders();
@@ -68,21 +75,27 @@ export default function LeadersPage() {
     setStatusMessage({ text: 'Adicionando líder...', type: 'info' });
 
     try {
-      // Validate form
-      if (!newLeader.name.trim() || !newLeader.phone.trim()) {
-        throw new Error("Nome e telefone são obrigatórios");
+      // Validate form - all fields required
+      if (!newLeader.name.trim() || !newLeader.phone.trim() || !newLeader.email.trim() || !newLeader.curso.trim()) {
+        throw new Error("Todos os campos são obrigatórios");
       }
+
+      // Capitalize the name before adding to database
+      const capitalizedName = capitalizeName(newLeader.name);
 
       // Add leader to Supabase
       const { error } = await supabase
         .from('leaders')
-        .insert([newLeader])
+        .insert([{
+          ...newLeader,
+          name: capitalizedName
+        }])
         .select();
       
       if (error) throw error;
       
       // Update UI
-      setStatusMessage({ text: `Líder ${newLeader.name} adicionado com sucesso!`, type: 'success' });
+      setStatusMessage({ text: `Líder ${capitalizedName} adicionado com sucesso!`, type: 'success' });
       setNewLeader({ name: '', phone: '', email: '', curso: '', active: true });
       
       // Refresh leaders list
@@ -115,17 +128,20 @@ export default function LeadersPage() {
     if (!editingLeader) return;
 
     try {
-      // Validate form
-      if (!editingLeader.name.trim() || !editingLeader.phone.trim()) {
-        throw new Error("Nome e telefone são obrigatórios");
+      // Validate form - all fields required
+      if (!editingLeader.name.trim() || !editingLeader.phone.trim() || !editingLeader.email.trim() || !editingLeader.curso.trim()) {
+        throw new Error("Todos os campos são obrigatórios");
       }
+
+      // Capitalize the name before updating database
+      const capitalizedName = capitalizeName(editingLeader.name);
 
       setStatusMessage({ text: 'Atualizando líder...', type: 'info' });
 
       const { error } = await supabase
         .from('leaders')
         .update({
-          name: editingLeader.name,
+          name: capitalizedName,
           phone: editingLeader.phone,
           email: editingLeader.email,
           curso: editingLeader.curso,
@@ -136,7 +152,7 @@ export default function LeadersPage() {
       if (error) throw error;
       
       // Update UI
-      setStatusMessage({ text: `Líder ${editingLeader.name} atualizado com sucesso!`, type: 'success' });
+      setStatusMessage({ text: `Líder ${capitalizedName} atualizado com sucesso!`, type: 'success' });
       setEditingLeader(null);
       
       // Refresh leaders list
@@ -245,6 +261,7 @@ export default function LeadersPage() {
                 placeholder="E-mail"
                 value={newLeader.email}
                 onChange={(e) => setNewLeader({...newLeader, email: e.target.value})}
+                required
               />
             </div>
             
@@ -256,6 +273,7 @@ export default function LeadersPage() {
                 placeholder="Curso"
                 value={newLeader.curso}
                 onChange={(e) => setNewLeader({...newLeader, curso: e.target.value})}
+                required
               />
             </div>
             
@@ -342,6 +360,7 @@ export default function LeadersPage() {
                           className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all"
                           value={editingLeader.email}
                           onChange={(e) => handleEditChange(e, 'email')}
+                          required
                         />
                       </div>
                       
@@ -352,6 +371,7 @@ export default function LeadersPage() {
                           className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all"
                           value={editingLeader.curso}
                           onChange={(e) => handleEditChange(e, 'curso')}
+                          required
                         />
                       </div>
                       
