@@ -13,6 +13,13 @@ interface Leader {
   active?: boolean;
 }
 
+interface FormErrors {
+  name?: string;
+  phone?: string;
+  email?: string;
+  curso?: string;
+}
+
 export default function LeadersPage() {
   const [leaders, setLeaders] = useState<Leader[]>([]);
   const [newLeader, setNewLeader] = useState({ name: '', phone: '', email: '', curso: '', active: true });
@@ -20,12 +27,38 @@ export default function LeadersPage() {
   const [statusMessage, setStatusMessage] = useState<{text: string, type: 'success' | 'error' | 'info'} | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [filterActive, setFilterActive] = useState<'all' | 'active' | 'inactive'>('active');
+  const [formErrors, setFormErrors] = useState<FormErrors>({});
+  const [editFormErrors, setEditFormErrors] = useState<FormErrors>({});
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Function to capitalize first letter of each word in a name
   const capitalizeName = (name: string): string => {
     return name.trim().split(' ').map(word => 
       word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
     ).join(' ');
+  };
+
+  // Format phone number as user types (Brazilian format)
+  const formatPhoneNumber = (phone: string): string => {
+    // Remove all non-digit characters
+    const digitsOnly = phone.replace(/\D/g, '');
+    
+    // Format according to Brazilian phone number pattern
+    if (digitsOnly.length <= 2) {
+      return digitsOnly;
+    } else if (digitsOnly.length <= 6) {
+      return `(${digitsOnly.slice(0, 2)}) ${digitsOnly.slice(2)}`;
+    } else if (digitsOnly.length <= 10) {
+      return `(${digitsOnly.slice(0, 2)}) ${digitsOnly.slice(2, 6)}-${digitsOnly.slice(6)}`;
+    } else {
+      return `(${digitsOnly.slice(0, 2)}) ${digitsOnly.slice(2, 7)}-${digitsOnly.slice(7, 11)}`;
+    }
+  };
+
+  // Validate email format
+  const isValidEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
   };
 
   // Fetch leaders on component mount or when filter changes
@@ -70,16 +103,105 @@ export default function LeadersPage() {
     }
   };
 
+  // Validate form fields and return if valid
+  const validateForm = (leader: { name: string; phone: string; email: string; curso: string }): boolean => {
+    const errors: FormErrors = {};
+    
+    if (!leader.name.trim()) {
+      errors.name = 'Nome é obrigatório';
+    } else if (leader.name.trim().length < 3) {
+      errors.name = 'Nome deve ter pelo menos 3 caracteres';
+    }
+    
+    if (!leader.phone.trim()) {
+      errors.phone = 'Telefone é obrigatório';
+    } else if (leader.phone.replace(/\D/g, '').length < 10) {
+      errors.phone = 'Telefone deve ter pelo menos 10 dígitos';
+    }
+    
+    if (!leader.email.trim()) {
+      errors.email = 'E-mail é obrigatório';
+    } else if (!isValidEmail(leader.email)) {
+      errors.email = 'E-mail inválido';
+    }
+    
+    if (!leader.curso.trim()) {
+      errors.curso = 'Curso é obrigatório';
+    }
+    
+    if (editingLeader) {
+      setEditFormErrors(errors);
+    } else {
+      setFormErrors(errors);
+    }
+    
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, field: string) => {
+    let value = e.target.value;
+    
+    // Apply formatting for specific fields
+    if (field === 'phone') {
+      value = formatPhoneNumber(value);
+    } else if (field === 'name') {
+      // Real-time validation for name field
+      if (value && value.length > 0 && !/^[A-Za-zÀ-ÖØ-öø-ÿ\s]*$/.test(value)) {
+        if (editingLeader) {
+          setEditFormErrors({...editFormErrors, name: 'Nome deve conter apenas letras'});
+        } else {
+          setFormErrors({...formErrors, name: 'Nome deve conter apenas letras'});
+        }
+      } else {
+        if (editingLeader) {
+          setEditFormErrors({...editFormErrors, name: undefined});
+        } else {
+          setFormErrors({...formErrors, name: undefined});
+        }
+      }
+    } else if (field === 'email') {
+      // Real-time validation for email
+      if (value && !isValidEmail(value)) {
+        if (editingLeader) {
+          setEditFormErrors({...editFormErrors, email: 'E-mail inválido'});
+        } else {
+          setFormErrors({...formErrors, email: 'E-mail inválido'});
+        }
+      } else {
+        if (editingLeader) {
+          setEditFormErrors({...editFormErrors, email: undefined});
+        } else {
+          setFormErrors({...formErrors, email: undefined});
+        }
+      }
+    }
+    
+    // Update the state based on whether we're editing or adding
+    if (editingLeader) {
+      setEditingLeader({
+        ...editingLeader,
+        [field]: value
+      });
+    } else {
+      setNewLeader({
+        ...newLeader,
+        [field]: value
+      });
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate all fields before submission
+    if (!validateForm(newLeader)) {
+      setStatusMessage({ text: 'Corrija os erros no formulário antes de enviar', type: 'error' });
+      return;
+    }
+    
     setStatusMessage({ text: 'Adicionando líder...', type: 'info' });
 
     try {
-      // Validate form - all fields required
-      if (!newLeader.name.trim() || !newLeader.phone.trim() || !newLeader.email.trim() || !newLeader.curso.trim()) {
-        throw new Error("Todos os campos são obrigatórios");
-      }
-
       // Capitalize the name before adding to database
       const capitalizedName = capitalizeName(newLeader.name);
 
@@ -97,6 +219,7 @@ export default function LeadersPage() {
       // Update UI
       setStatusMessage({ text: `Líder ${capitalizedName} adicionado com sucesso!`, type: 'success' });
       setNewLeader({ name: '', phone: '', email: '', curso: '', active: true });
+      setFormErrors({});
       
       // Refresh leaders list
       fetchLeaders();
@@ -108,31 +231,29 @@ export default function LeadersPage() {
 
   const startEditing = (leader: Leader) => {
     setEditingLeader({ ...leader });
+    setEditFormErrors({});
     setStatusMessage(null);
   };
 
   const cancelEditing = () => {
     setEditingLeader(null);
+    setEditFormErrors({});
   };
 
   const handleEditChange = (e: React.ChangeEvent<HTMLInputElement>, field: keyof Leader) => {
-    if (editingLeader) {
-      setEditingLeader({
-        ...editingLeader,
-        [field]: e.target.value
-      });
-    }
+    handleInputChange(e, field);
   };
 
   const saveEditedLeader = async () => {
     if (!editingLeader) return;
 
-    try {
-      // Validate form - all fields required
-      if (!editingLeader.name.trim() || !editingLeader.phone.trim() || !editingLeader.email.trim() || !editingLeader.curso.trim()) {
-        throw new Error("Todos os campos são obrigatórios");
-      }
+    // Validate all fields before submission
+    if (!validateForm(editingLeader)) {
+      setStatusMessage({ text: 'Corrija os erros no formulário antes de enviar', type: 'error' });
+      return;
+    }
 
+    try {
       // Capitalize the name before updating database
       const capitalizedName = capitalizeName(editingLeader.name);
 
@@ -154,6 +275,7 @@ export default function LeadersPage() {
       // Update UI
       setStatusMessage({ text: `Líder ${capitalizedName} atualizado com sucesso!`, type: 'success' });
       setEditingLeader(null);
+      setEditFormErrors({});
       
       // Refresh leaders list
       fetchLeaders();
@@ -205,6 +327,27 @@ export default function LeadersPage() {
     }
   };
 
+  // Filter leaders based on search term
+  const filteredLeaders = leaders.filter(leader => {
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    return (
+      leader.name.toLowerCase().includes(term) ||
+      leader.email.toLowerCase().includes(term) ||
+      leader.curso.toLowerCase().includes(term)
+    );
+  });
+
+  // Auto-dismiss status messages after 5 seconds
+  useEffect(() => {
+    if (statusMessage && (statusMessage.type === 'success' || statusMessage.type === 'info')) {
+      const timer = setTimeout(() => {
+        setStatusMessage(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [statusMessage]);
+
   return (
     <div className="container mx-auto p-4">
       <div className="flex justify-between items-center mb-6">
@@ -230,51 +373,81 @@ export default function LeadersPage() {
           <h2 className="text-xl font-semibold mb-4">Adicionar Novo Líder</h2>
           <form onSubmit={handleSubmit} className="space-y-4 p-4 border rounded shadow-sm">
             <div>
-              <label className="block mb-1">Nome</label>
+              <label className="block mb-1">
+                Nome <span className="text-red-500">*</span>
+              </label>
               <input 
                 type="text"
-                className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all"
-                placeholder="Nome do Líder"
+                className={`w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all ${
+                  formErrors.name ? 'border-red-500 bg-red-50' : ''
+                }`}
+                placeholder="Nome completo do Líder"
                 value={newLeader.name}
-                onChange={(e) => setNewLeader({...newLeader, name: e.target.value})}
+                onChange={(e) => handleInputChange(e, 'name')}
                 required
               />
+              {formErrors.name && (
+                <p className="text-sm text-red-600 mt-1">{formErrors.name}</p>
+              )}
+              <p className="text-xs text-gray-500 mt-1">Digite o nome completo com letras maiúsculas no início de cada palavra.</p>
             </div>
             
             <div>
-              <label className="block mb-1">Telefone</label>
+              <label className="block mb-1">
+                Telefone <span className="text-red-500">*</span>
+              </label>
               <input 
                 type="text"
-                className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all"
-                placeholder="Número de Telefone"
+                className={`w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all ${
+                  formErrors.phone ? 'border-red-500 bg-red-50' : ''
+                }`}
+                placeholder="(00) 00000-0000"
                 value={newLeader.phone}
-                onChange={(e) => setNewLeader({...newLeader, phone: e.target.value})}
+                onChange={(e) => handleInputChange(e, 'phone')}
                 required
               />
+              {formErrors.phone && (
+                <p className="text-sm text-red-600 mt-1">{formErrors.phone}</p>
+              )}
+              <p className="text-xs text-gray-500 mt-1">Formato: (00) 00000-0000</p>
             </div>
             
             <div>
-              <label className="block mb-1">E-mail</label>
+              <label className="block mb-1">
+                E-mail <span className="text-red-500">*</span>
+              </label>
               <input 
                 type="email"
-                className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all"
-                placeholder="E-mail"
+                className={`w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all ${
+                  formErrors.email ? 'border-red-500 bg-red-50' : ''
+                }`}
+                placeholder="email@exemplo.com"
                 value={newLeader.email}
-                onChange={(e) => setNewLeader({...newLeader, email: e.target.value})}
+                onChange={(e) => handleInputChange(e, 'email')}
                 required
               />
+              {formErrors.email && (
+                <p className="text-sm text-red-600 mt-1">{formErrors.email}</p>
+              )}
             </div>
             
             <div>
-              <label className="block mb-1">Curso</label>
+              <label className="block mb-1">
+                Curso <span className="text-red-500">*</span>
+              </label>
               <input 
                 type="text"
-                className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all"
-                placeholder="Curso"
+                className={`w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all ${
+                  formErrors.curso ? 'border-red-500 bg-red-50' : ''
+                }`}
+                placeholder="Ex: Engenharia, Medicina, etc."
                 value={newLeader.curso}
-                onChange={(e) => setNewLeader({...newLeader, curso: e.target.value})}
+                onChange={(e) => handleInputChange(e, 'curso')}
                 required
               />
+              {formErrors.curso && (
+                <p className="text-sm text-red-600 mt-1">{formErrors.curso}</p>
+              )}
             </div>
             
             <button 
@@ -288,10 +461,28 @@ export default function LeadersPage() {
         
         {/* Leaders list */}
         <div>
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold">Lista de Líderes ({leaders.length})</h2>
+          <div className="mb-4">
+            <h2 className="text-xl font-semibold mb-3">Lista de Líderes ({filteredLeaders.length})</h2>
             
-            {/* Add filter dropdown */}
+            {/* Search input */}
+            <div className="mb-3">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Buscar por nome, email ou curso..."
+                  className="pl-10 w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+            </div>
+            
+            {/* Filter dropdown */}
             <div className="flex items-center space-x-2">
               <label htmlFor="leader-status-filter" className="text-sm font-medium text-gray-700">Exibir:</label>
               <select 
@@ -312,9 +503,9 @@ export default function LeadersPage() {
               <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
               <span className="ml-2 text-gray-500">Carregando líderes...</span>
             </div>
-          ) : leaders.length > 0 ? (
+          ) : filteredLeaders.length > 0 ? (
             <ul className="space-y-3">
-              {leaders.map(leader => (
+              {filteredLeaders.map(leader => (
                 <li 
                   key={leader.id} 
                   className={`border rounded shadow-sm transition-all duration-300 ${
@@ -332,47 +523,75 @@ export default function LeadersPage() {
                       }}
                     >
                       <div>
-                        <label className="block text-sm text-gray-600 mb-1">Nome</label>
+                        <label className="block text-sm text-gray-600 mb-1">
+                          Nome <span className="text-red-500">*</span>
+                        </label>
                         <input 
                           type="text"
-                          className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all"
+                          className={`w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all ${
+                            editFormErrors.name ? 'border-red-500 bg-red-50' : ''
+                          }`}
                           value={editingLeader.name}
                           onChange={(e) => handleEditChange(e, 'name')}
                           required
                         />
+                        {editFormErrors.name && (
+                          <p className="text-sm text-red-600 mt-1">{editFormErrors.name}</p>
+                        )}
                       </div>
                       
                       <div>
-                        <label className="block text-sm text-gray-600 mb-1">Telefone</label>
+                        <label className="block text-sm text-gray-600 mb-1">
+                          Telefone <span className="text-red-500">*</span>
+                        </label>
                         <input 
                           type="text"
-                          className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all"
+                          className={`w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all ${
+                            editFormErrors.phone ? 'border-red-500 bg-red-50' : ''
+                          }`}
                           value={editingLeader.phone}
                           onChange={(e) => handleEditChange(e, 'phone')}
                           required
                         />
+                        {editFormErrors.phone && (
+                          <p className="text-sm text-red-600 mt-1">{editFormErrors.phone}</p>
+                        )}
                       </div>
                       
                       <div>
-                        <label className="block text-sm text-gray-600 mb-1">E-mail</label>
+                        <label className="block text-sm text-gray-600 mb-1">
+                          E-mail <span className="text-red-500">*</span>
+                        </label>
                         <input 
                           type="email"
-                          className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all"
+                          className={`w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all ${
+                            editFormErrors.email ? 'border-red-500 bg-red-50' : ''
+                          }`}
                           value={editingLeader.email}
                           onChange={(e) => handleEditChange(e, 'email')}
                           required
                         />
+                        {editFormErrors.email && (
+                          <p className="text-sm text-red-600 mt-1">{editFormErrors.email}</p>
+                        )}
                       </div>
                       
                       <div>
-                        <label className="block text-sm text-gray-600 mb-1">Curso</label>
+                        <label className="block text-sm text-gray-600 mb-1">
+                          Curso <span className="text-red-500">*</span>
+                        </label>
                         <input 
                           type="text"
-                          className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all"
+                          className={`w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all ${
+                            editFormErrors.curso ? 'border-red-500 bg-red-50' : ''
+                          }`}
                           value={editingLeader.curso}
                           onChange={(e) => handleEditChange(e, 'curso')}
                           required
                         />
+                        {editFormErrors.curso && (
+                          <p className="text-sm text-red-600 mt-1">{editFormErrors.curso}</p>
+                        )}
                       </div>
                       
                       <div className="flex justify-end space-x-2 pt-2">
@@ -452,7 +671,8 @@ export default function LeadersPage() {
           ) : (
             <div className="text-center py-8 border rounded bg-gray-50">
               <p className="text-gray-500">
-                {filterActive === 'active' ? 'Nenhum líder ativo encontrado.' :
+                {searchTerm ? 'Nenhum líder encontrado com este termo de busca.' :
+                 filterActive === 'active' ? 'Nenhum líder ativo encontrado.' :
                  filterActive === 'inactive' ? 'Nenhum líder inativo encontrado.' :
                  'Nenhum líder cadastrado. Adicione seu primeiro líder!'}
               </p>

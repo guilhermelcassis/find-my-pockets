@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../../../lib/supabase';
 import Link from 'next/link';
 import { Group } from '../../../lib/interfaces';
@@ -24,6 +24,9 @@ export default function GroupsPage() {
   const [showLeaderDropdown, setShowLeaderDropdown] = useState<boolean>(false);
   const [filteredLeaders, setFilteredLeaders] = useState<{ id: string; name: string; phone: string; email: string; curso: string; active?: boolean }[]>([]);
   const leaderDropdownRef = useRef<HTMLDivElement>(null); // Ref for the leader dropdown
+  const [searchTerm, setSearchTerm] = useState('');
+  const [activeTab, setActiveTab] = useState<'details' | 'location'>('details'); // For modal tabs
+  const [formErrors, setFormErrors] = useState<{[key: string]: string}>({});
   
   // Google Maps related states
   const mapRef = useRef<HTMLDivElement>(null);
@@ -381,13 +384,40 @@ export default function GroupsPage() {
     setSelectedLeaderId('');
   };
   
+  // Add validation function for the form
+  const validateGroupForm = () => {
+    const errors: {[key: string]: string} = {};
+    
+    if (!selectedLeaderId) {
+      errors.leader = "É necessário selecionar um líder";
+    }
+    
+    if (!editingGroup?.dayofweek) {
+      errors.dayofweek = "Dia da semana é obrigatório";
+    }
+    
+    if (!editingGroup?.time) {
+      errors.time = "Horário é obrigatório";
+    }
+    
+    if (!editingGroup?.instagram || editingGroup.instagram.trim() === '') {
+      errors.instagram = "Instagram é obrigatório";
+    } else if (editingGroup.instagram.startsWith('@')) {
+      errors.instagram = "Não inclua o @ no início do nome de usuário";
+    }
+    
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const saveEdits = async () => {
     if (!editingGroup) return;
     
     try {
-      // Validate required fields
-      if (!selectedLeaderId) {
-        throw new Error("Por favor, selecione um líder");
+      // Validate form
+      if (!validateGroupForm()) {
+        setStatusMessage({ text: "Corrija os erros no formulário antes de salvar", type: 'error' });
+        return;
       }
       
       // Find the selected leader
@@ -400,7 +430,9 @@ export default function GroupsPage() {
       const updateData = {
         dayofweek: editingGroup.dayofweek,
         time: editingGroup.time,
-        instagram: editingGroup.instagram,
+        instagram: editingGroup.instagram.startsWith('@') 
+          ? editingGroup.instagram.substring(1) // Remove @ if user added it
+          : editingGroup.instagram,
         tipo: editingGroup.tipo || 'Publica',
         local: editingGroup.local || '',
         leader: {
@@ -441,6 +473,8 @@ export default function GroupsPage() {
       setShowLocationEdit(false);
       setLocationSelected(false);
       setSelectedLeaderId('');
+      setFormErrors({});
+      setActiveTab('details');
       fetchGroups();
     } catch (error) {
       console.error("Erro ao atualizar grupo:", error);
@@ -453,6 +487,50 @@ export default function GroupsPage() {
     fetchGroups();
   }, [filterActive]);
 
+  // Add this function to filter groups based on search term
+  const filteredGroups = useMemo(() => {
+    if (!searchTerm) return groups;
+    
+    const term = searchTerm.toLowerCase();
+    return groups.filter(group => 
+      group.university.toLowerCase().includes(term) ||
+      group.city.toLowerCase().includes(term) ||
+      group.state.toLowerCase().includes(term) ||
+      group.leader.name.toLowerCase().includes(term) ||
+      (group.leader.curso && group.leader.curso.toLowerCase().includes(term)) ||
+      (group.location && group.location.toLowerCase().includes(term))
+    );
+  }, [groups, searchTerm]);
+
+  // Auto-dismiss status messages after 5 seconds
+  useEffect(() => {
+    if (statusMessage && (statusMessage.type === 'success' || statusMessage.type === 'info')) {
+      const timer = setTimeout(() => {
+        setStatusMessage(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [statusMessage]);
+
+  // Add click outside handler for leader dropdown
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (leaderDropdownRef.current && !leaderDropdownRef.current.contains(event.target as Node)) {
+        setShowLeaderDropdown(false);
+      }
+    }
+
+    // Add event listener when dropdown is open
+    if (showLeaderDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    
+    // Cleanup event listener
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showLeaderDropdown]);
+
   return (
     <div className="container mx-auto p-4">
       <div className="flex justify-between items-center mb-6">
@@ -463,326 +541,405 @@ export default function GroupsPage() {
       </div>
       
       {statusMessage && (
-        <div className={`p-3 mb-4 rounded ${
-          statusMessage.type === 'success' ? 'bg-green-100 text-green-800' : 
-          statusMessage.type === 'error' ? 'bg-red-100 text-red-800' : 
-          'bg-blue-100 text-blue-800'
+        <div className={`p-3 mb-4 rounded shadow-sm transition-all duration-300 ${
+          statusMessage.type === 'success' ? 'bg-green-100 text-green-800 border-l-4 border-green-500' : 
+          statusMessage.type === 'error' ? 'bg-red-100 text-red-800 border-l-4 border-red-500' : 
+          'bg-blue-100 text-blue-800 border-l-4 border-blue-500'
         }`}>
           {statusMessage.text}
         </div>
       )}
       
-      {/* Editing Modal */}
+      {/* Improved Editing Modal */}
       {editingGroup && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-bold mb-4">Editar Grupo</h2>
             
-            {!showLocationEdit ? (
-              <>
-                {/* Location details - read only section */}
-                <div className="bg-gray-50 p-4 rounded border mb-6">
-                  <div className="flex justify-between items-center mb-2">
-                    <h3 className="font-semibold">Detalhes da Localização</h3>
-                    <button 
-                      onClick={() => setShowLocationEdit(true)}
-                      className="text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600"
+            {/* Tabs */}
+            <div className="flex border-b mb-4">
+              <button
+                className={`px-4 py-2 font-medium ${activeTab === 'details' 
+                  ? 'text-blue-600 border-b-2 border-blue-600' 
+                  : 'text-gray-500 hover:text-gray-700'}`}
+                onClick={() => setActiveTab('details')}
+              >
+                Detalhes do Grupo
+              </button>
+              <button
+                className={`px-4 py-2 font-medium ${activeTab === 'location' 
+                  ? 'text-blue-600 border-b-2 border-blue-600' 
+                  : 'text-gray-500 hover:text-gray-700'}`}
+                onClick={() => setActiveTab('location')}
+              >
+                Localização
+              </button>
+            </div>
+            
+            {/* Details Tab */}
+            {activeTab === 'details' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block mb-1 text-sm">
+                      Dia da Semana <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={editingGroup.dayofweek}
+                      onChange={(e) => setEditingGroup({...editingGroup, dayofweek: e.target.value})}
+                      className={`w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all ${
+                        formErrors.dayofweek ? 'border-red-500 bg-red-50' : ''
+                      }`}
                     >
-                      Alterar Localização
-                    </button>
+                      <option value="">Selecione um dia</option>
+                      <option value="Segunda-feira">Segunda-feira</option>
+                      <option value="Terça-feira">Terça-feira</option>
+                      <option value="Quarta-feira">Quarta-feira</option>
+                      <option value="Quinta-feira">Quinta-feira</option>
+                      <option value="Sexta-feira">Sexta-feira</option>
+                      <option value="Sábado">Sábado</option>
+                      <option value="Domingo">Domingo</option>
+                    </select>
+                    {formErrors.dayofweek && (
+                      <p className="text-sm text-red-600 mt-1">{formErrors.dayofweek}</p>
+                    )}
                   </div>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-white p-3 rounded shadow-sm">
-                      <h4 className="text-sm text-gray-500">Universidade</h4>
-                      <p className="font-medium">{editingGroup.university}</p>
-                    </div>
-                    
-                    <div className="bg-white p-3 rounded shadow-sm">
-                      <h4 className="text-sm text-gray-500">Cidade</h4>
-                      <p className="font-medium">{editingGroup.city}</p>
-                    </div>
-                    
-                    <div className="bg-white p-3 rounded shadow-sm">
-                      <h4 className="text-sm text-gray-500">Estado</h4>
-                      <p className="font-medium">{editingGroup.state}</p>
-                    </div>
-                    
-                    <div className="bg-white p-3 rounded shadow-sm">
-                      <h4 className="text-sm text-gray-500">País</h4>
-                      <p className="font-medium">{editingGroup.country}</p>
-                    </div>
-                    
-                    <div className="bg-white p-3 rounded shadow-sm">
-                      <h4 className="text-sm text-gray-500">Localização</h4>
-                      <p className="font-medium">{editingGroup.location}</p>
-                    </div>
-                    
-                    {editingGroup.fulladdress && (
-                      <div className="bg-white p-3 rounded shadow-sm">
-                        <h4 className="text-sm text-gray-500">Endereço Completo</h4>
-                        <p className="font-medium text-sm">{editingGroup.fulladdress}</p>
-                      </div>
+                  <div>
+                    <label className="block mb-1 text-sm">
+                      Horário <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="time"
+                      value={editingGroup.time}
+                      onChange={(e) => setEditingGroup({...editingGroup, time: e.target.value})}
+                      className={`w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all ${
+                        formErrors.time ? 'border-red-500 bg-red-50' : ''
+                      }`}
+                    />
+                    {formErrors.time && (
+                      <p className="text-sm text-red-600 mt-1">{formErrors.time}</p>
                     )}
-                    
-                    <div className="bg-white p-3 rounded shadow-sm col-span-2">
-                      <h4 className="text-sm text-gray-500">Coordenadas</h4>
-                      <p className="font-medium text-sm">
-                        Lat: {editingGroup.coordinates.latitude.toFixed(6)}, 
-                        Lng: {editingGroup.coordinates.longitude.toFixed(6)}
-                      </p>
-                    </div>
                   </div>
                 </div>
                 
-                {/* Editable fields */}
-                <div className="space-y-4">
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block mb-1 text-sm">Dia da Semana</label>
-                      <select
-                        value={editingGroup.dayofweek}
-                        onChange={(e) => setEditingGroup({...editingGroup, dayofweek: e.target.value})}
-                        className="w-full border p-2 rounded"
-                      >
-                        <option value="Segunda-feira">Segunda-feira</option>
-                        <option value="Terça-feira">Terça-feira</option>
-                        <option value="Quarta-feira">Quarta-feira</option>
-                        <option value="Quinta-feira">Quinta-feira</option>
-                        <option value="Sexta-feira">Sexta-feira</option>
-                        <option value="Sábado">Sábado</option>
-                        <option value="Domingo">Domingo</option>
-                      </select>
-                    </div>
-                    
-                    <div>
-                      <label className="block mb-1 text-sm">Horário</label>
-                      <input
-                        type="time"
-                        value={editingGroup.time}
-                        onChange={(e) => setEditingGroup({...editingGroup, time: e.target.value})}
-                        className="w-full border p-2 rounded"
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block mb-1 text-sm">Tipo</label>
-                      <select
-                        value={editingGroup.tipo || 'Publica'}
-                        onChange={(e) => setEditingGroup({...editingGroup, tipo: e.target.value})}
-                        className="w-full border p-2 rounded"
-                      >
-                        <option value="Publica">Pública</option>
-                        <option value="Privada">Privada</option>
-                      </select>
-                    </div>
-                    
-                    <div>
-                      <label className="block mb-1 text-sm">Local</label>
-                      <input
-                        type="text"
-                        value={editingGroup.local || ''}
-                        onChange={(e) => setEditingGroup({...editingGroup, local: e.target.value})}
-                        className="w-full border p-2 rounded"
-                      />
-                    </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block mb-1 text-sm">Tipo</label>
+                    <select
+                      value={editingGroup.tipo || 'Publica'}
+                      onChange={(e) => setEditingGroup({...editingGroup, tipo: e.target.value})}
+                      className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all"
+                    >
+                      <option value="Publica">Pública</option>
+                      <option value="Privada">Privada</option>
+                    </select>
                   </div>
                   
                   <div>
-                    <label className="block mb-1 text-sm">Instagram</label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={editingGroup.instagram}
-                        onChange={(e) => setEditingGroup({...editingGroup, instagram: e.target.value})}
-                        className="w-full border p-2 rounded pl-6"
-                      />
-                      <span className="absolute left-2 top-2.5 text-gray-500">@</span>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">Informe o nome de usuário do Instagram</p>
+                    <label className="block mb-1 text-sm">Local</label>
+                    <input
+                      type="text"
+                      value={editingGroup.local || ''}
+                      onChange={(e) => setEditingGroup({...editingGroup, local: e.target.value})}
+                      className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all"
+                      placeholder="Ex: Bloco A, Sala 101"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Local específico dentro da universidade</p>
                   </div>
-                  
-                  {/* Leader selection dropdown */}
-                  <div>
-                    <label className="block mb-1 text-sm">Líder</label>
-                    <div className="relative" ref={leaderDropdownRef}>
-                      <input 
-                        type="text" 
-                        className="w-full border p-2 rounded"
-                        placeholder="Buscar líder por nome..."
-                        onFocus={() => {
-                          setShowLeaderDropdown(true);
-                          // Initialize filtered leaders if empty
-                          if (filteredLeaders.length === 0) {
+                </div>
+                
+                <div>
+                  <label className="block mb-1 text-sm">
+                    Instagram <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={editingGroup.instagram}
+                      onChange={(e) => setEditingGroup({...editingGroup, instagram: e.target.value})}
+                      className={`w-full border p-2 rounded pl-6 focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all ${
+                        formErrors.instagram ? 'border-red-500 bg-red-50' : ''
+                      }`}
+                      placeholder="usuariodoinstagram"
+                    />
+                    <span className="absolute left-2 top-2.5 text-gray-500">@</span>
+                  </div>
+                  {formErrors.instagram ? (
+                    <p className="text-sm text-red-600 mt-1">{formErrors.instagram}</p>
+                  ) : (
+                    <p className="text-xs text-gray-500 mt-1">Informe apenas o nome de usuário, sem o @</p>
+                  )}
+                </div>
+                
+                {/* Leader selection dropdown - Improved */}
+                <div>
+                  <label className="block mb-1 text-sm">
+                    Líder <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative" ref={leaderDropdownRef}>
+                    <input 
+                      type="text" 
+                      className={`w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all ${
+                        formErrors.leader ? 'border-red-500 bg-red-50' : ''
+                      }`}
+                      placeholder="Buscar líder por nome..."
+                      onFocus={() => {
+                        setShowLeaderDropdown(true);
+                        // Initialize filtered leaders if empty
+                        if (filteredLeaders.length === 0) {
+                          setFilteredLeaders(leaders.filter(leader => leader.active !== false));
+                        }
+                      }}
+                      onChange={(e) => {
+                        // Filter leaders based on input
+                        const searchTerm = e.target.value.toLowerCase();
+                        
+                        // If input is cleared and a leader was previously selected, keep showing that one
+                        if (searchTerm === '' && selectedLeaderId) {
+                          const selected = leaders.find(l => l.id === selectedLeaderId);
+                          if (selected) {
+                            setFilteredLeaders([selected]);
+                          } else {
+                            // Only include active leaders
                             setFilteredLeaders(leaders.filter(leader => leader.active !== false));
                           }
-                        }}
-                        onChange={(e) => {
-                          // Filter leaders based on input
-                          const searchTerm = e.target.value.toLowerCase();
-                          
-                          // If input is cleared and a leader was previously selected, keep showing that one
-                          if (searchTerm === '' && selectedLeaderId) {
-                            const selected = leaders.find(l => l.id === selectedLeaderId);
-                            if (selected) {
-                              setFilteredLeaders([selected]);
-                            } else {
-                              // Only include active leaders
-                              setFilteredLeaders(leaders.filter(leader => leader.active !== false));
-                            }
-                          } else {
-                            // Filter based on search term and active status
-                            const filtered = leaders.filter(leader => 
-                              leader.active !== false && (
-                                leader.name.toLowerCase().includes(searchTerm) || 
-                                leader.phone.includes(searchTerm) ||
-                                (leader.curso && leader.curso.toLowerCase().includes(searchTerm))
-                              )
-                            );
-                            setFilteredLeaders(filtered);
-                          }
-                          
-                          // Show dropdown when typing
-                          setShowLeaderDropdown(true);
-                        }}
-                      />
-                      
-                      {/* Dropdown Icon */}
-                      <div 
-                        className="absolute inset-y-0 right-0 flex items-center px-2 cursor-pointer"
-                        onClick={() => setShowLeaderDropdown(!showLeaderDropdown)}
-                      >
-                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                        </svg>
-                      </div>
-                      
-                      {/* Dropdown Menu */}
-                      {showLeaderDropdown && (
-                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto">
-                          {filteredLeaders.length > 0 ? (
-                            filteredLeaders
-                              .sort((a, b) => a.name.localeCompare(b.name)) // Sort alphabetically
-                              .map(leader => (
-                                <div 
-                                  key={leader.id} 
-                                  className={`p-2 cursor-pointer hover:bg-blue-50 ${
-                                    selectedLeaderId === leader.id ? 'bg-blue-100' : ''
-                                  }`}
-                                  onClick={() => {
-                                    setSelectedLeaderId(leader.id);
-                                    setShowLeaderDropdown(false);
-                                  }}
-                                >
-                                  <div className="font-medium">{leader.name}</div>
-                                  <div className="text-xs text-gray-600">
-                                    {leader.phone} {leader.curso ? `• ${leader.curso}` : ''}
-                                  </div>
-                                </div>
-                              ))
-                          ) : (
-                            <div className="p-2 text-gray-500">
-                              Nenhum líder encontrado
-                            </div>
-                          )}
-                        </div>
-                      )}
+                        } else {
+                          // Filter based on search term and active status
+                          const filtered = leaders.filter(leader => 
+                            leader.active !== false && (
+                              leader.name.toLowerCase().includes(searchTerm) || 
+                              leader.phone.includes(searchTerm) ||
+                              (leader.curso && leader.curso.toLowerCase().includes(searchTerm))
+                            )
+                          );
+                          setFilteredLeaders(filtered);
+                        }
+                        
+                        // Show dropdown when typing
+                        setShowLeaderDropdown(true);
+                      }}
+                    />
+                    
+                    {/* Dropdown Icon */}
+                    <div 
+                      className="absolute inset-y-0 right-0 flex items-center px-2 cursor-pointer"
+                      onClick={() => setShowLeaderDropdown(!showLeaderDropdown)}
+                    >
+                      <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                      </svg>
                     </div>
                     
-                    {/* Display currently selected leader */}
-                    {selectedLeaderId && (
-                      <div className="mt-2 p-1 bg-blue-50 border border-blue-100 rounded">
-                        <div className="text-xs">
-                          {(() => {
-                            const selected = leaders.find(l => l.id === selectedLeaderId);
-                            return selected ? (
-                              <div>
-                                <span className="font-medium">Líder:</span> {selected.name} ({selected.phone})
-                                {selected.curso && <span> • {selected.curso}</span>}
+                    {/* Dropdown Menu */}
+                    {showLeaderDropdown && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto">
+                        {filteredLeaders.length > 0 ? (
+                          filteredLeaders
+                            .sort((a, b) => a.name.localeCompare(b.name)) // Sort alphabetically
+                            .map(leader => (
+                              <div 
+                                key={leader.id} 
+                                className={`p-2 cursor-pointer hover:bg-blue-50 ${
+                                  selectedLeaderId === leader.id ? 'bg-blue-100' : ''
+                                }`}
+                                onClick={() => {
+                                  setSelectedLeaderId(leader.id);
+                                  setShowLeaderDropdown(false);
+                                  // Clear any leader selection error
+                                  if (formErrors.leader) {
+                                    const newErrors = {...formErrors};
+                                    delete newErrors.leader;
+                                    setFormErrors(newErrors);
+                                  }
+                                }}
+                              >
+                                <div className="font-medium">{leader.name}</div>
+                                <div className="text-xs text-gray-600">
+                                  {leader.phone} {leader.curso ? `• ${leader.curso}` : ''}
+                                </div>
                               </div>
-                            ) : null;
-                          })()}
-                        </div>
+                            ))
+                        ) : (
+                          <div className="p-2 text-gray-500">
+                            Nenhum líder disponível encontrado
+                          </div>
+                        )}
                       </div>
                     )}
-                    
-                    <p className="text-xs text-gray-500 mt-1">
-                      Digite o nome do líder, telefone ou curso para buscar
-                    </p>
-                    
-                    <p className="text-xs text-gray-500 mt-1">
-                      Escolha um líder para este grupo
-                    </p>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
-                {/* Google Maps Location Picker */}
-                <div className="mb-6">
-                  <div className="flex justify-between items-center mb-2">
-                    <h3 className="font-semibold">Alterar Localização</h3>
-                    <button 
-                      onClick={() => setShowLocationEdit(false)}
-                      className="text-xs bg-gray-300 text-gray-700 px-2 py-1 rounded hover:bg-gray-400"
-                    >
-                      Cancelar Alteração
-                    </button>
                   </div>
                   
-                  <div className="mb-4">
-                    <label className="block mb-1">Buscar Universidade</label>
-                    <input 
-                      ref={autocompleteInputRef}
-                      type="text" 
-                      className="w-full border p-2 rounded" 
-                      placeholder="Pesquisar por universidade" 
-                    />
-                  </div>
-                  
-                  <div ref={mapRef} className="w-full h-[300px] border rounded"></div>
-                  <p className="text-sm text-gray-600 mt-2">
-                    Clique no mapa ou arraste o marcador para definir a localização exata.
-                  </p>
-                  
-                  {locationSelected && (
-                    <div className="mt-4 p-3 bg-green-50 text-green-700 rounded border border-green-200">
-                      <p className="font-medium">Nova localização selecionada:</p>
-                      <p>{editingGroup.university}, {editingGroup.city}, {editingGroup.state}</p>
-                      <p className="text-sm mt-1">Clique em &quot;Aplicar Alteração&quot; para usar esta localização.</p>
+                  {/* Display currently selected leader */}
+                  {selectedLeaderId ? (
+                    <div className="mt-2 p-2 bg-blue-50 border border-blue-100 rounded">
+                      <div className="text-sm">
+                        {(() => {
+                          const selected = leaders.find(l => l.id === selectedLeaderId);
+                          return selected ? (
+                            <div className="flex justify-between">
+                              <div>
+                                <span className="font-medium">Líder:</span> {selected.name} 
+                                <div className="text-xs text-gray-600">
+                                  {selected.phone}
+                                  {selected.curso && <span> • {selected.curso}</span>}
+                                </div>
+                              </div>
+                              <button 
+                                type="button" 
+                                className="text-gray-500 hover:text-gray-700"
+                                onClick={() => {
+                                  setSelectedLeaderId('');
+                                  setFormErrors({...formErrors, leader: "É necessário selecionar um líder"});
+                                }}
+                                aria-label="Remover líder"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                              </button>
+                            </div>
+                          ) : null;
+                        })()}
+                      </div>
                     </div>
+                  ) : (
+                    formErrors.leader && (
+                      <p className="text-sm text-red-600 mt-1">{formErrors.leader}</p>
+                    )
                   )}
                   
-                  <div className="mt-4 flex justify-end">
-                    <button 
-                      onClick={() => setShowLocationEdit(false)}
-                      disabled={!locationSelected}
-                      className={`px-4 py-2 rounded ${
-                        locationSelected 
-                          ? 'bg-blue-500 hover:bg-blue-600 text-white' 
-                          : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                      }`}
-                    >
-                      Aplicar Alteração
-                    </button>
-                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Digite o nome ou curso para buscar um líder disponível
+                  </p>
                 </div>
-              </>
+              </div>
             )}
             
-            <div className="flex justify-end space-x-2 mt-6">
+            {/* Location Tab */}
+            {activeTab === 'location' && (
+              <div>
+                {!showLocationEdit ? (
+                  <>
+                    {/* Location details - read only section */}
+                    <div className="bg-gray-50 p-4 rounded border mb-4">
+                      <div className="flex justify-between items-center mb-2">
+                        <h3 className="font-semibold">Detalhes da Localização</h3>
+                        <button 
+                          onClick={() => setShowLocationEdit(true)}
+                          className="text-sm bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 transition-colors"
+                        >
+                          Alterar Localização
+                        </button>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="bg-white p-3 rounded shadow-sm">
+                          <h4 className="text-sm text-gray-500">Universidade</h4>
+                          <p className="font-medium">{editingGroup.university}</p>
+                        </div>
+                        
+                        <div className="bg-white p-3 rounded shadow-sm">
+                          <h4 className="text-sm text-gray-500">Cidade</h4>
+                          <p className="font-medium">{editingGroup.city}</p>
+                        </div>
+                        
+                        <div className="bg-white p-3 rounded shadow-sm">
+                          <h4 className="text-sm text-gray-500">Estado</h4>
+                          <p className="font-medium">{editingGroup.state}</p>
+                        </div>
+                        
+                        <div className="bg-white p-3 rounded shadow-sm">
+                          <h4 className="text-sm text-gray-500">País</h4>
+                          <p className="font-medium">{editingGroup.country}</p>
+                        </div>
+                      </div>
+                      
+                      {editingGroup.fulladdress && (
+                        <div className="mt-3 bg-white p-3 rounded shadow-sm">
+                          <h4 className="text-sm text-gray-500">Endereço Completo</h4>
+                          <p className="font-medium text-sm">{editingGroup.fulladdress}</p>
+                        </div>
+                      )}
+                      
+                      <div className="mt-3 bg-white p-3 rounded shadow-sm">
+                        <h4 className="text-sm text-gray-500">Coordenadas</h4>
+                        <p className="font-medium text-sm">
+                          Lat: {editingGroup.coordinates.latitude.toFixed(6)}, 
+                          Lng: {editingGroup.coordinates.longitude.toFixed(6)}
+                        </p>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Google Maps Location Picker */}
+                    <div className="mb-4">
+                      <div className="flex justify-between items-center mb-3">
+                        <h3 className="font-semibold">Alterar Localização</h3>
+                        <button 
+                          onClick={() => setShowLocationEdit(false)}
+                          className="text-sm bg-gray-300 text-gray-700 px-3 py-1 rounded hover:bg-gray-400 transition-colors"
+                        >
+                          Cancelar Alteração
+                        </button>
+                      </div>
+                      
+                      <div className="mb-4">
+                        <label className="block mb-1 text-sm">Buscar Universidade</label>
+                        <input 
+                          ref={autocompleteInputRef}
+                          type="text" 
+                          className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all" 
+                          placeholder="Pesquisar por universidade ou faculdade" 
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Digite o nome da universidade ou faculdade e selecione nas opções
+                        </p>
+                      </div>
+                      
+                      <div ref={mapRef} className="w-full h-[350px] border rounded"></div>
+                      <p className="text-sm text-gray-600 mt-2">
+                        Utilize a busca acima para encontrar a localização exata da universidade.
+                      </p>
+                      
+                      {locationSelected && (
+                        <div className="mt-4 p-3 bg-green-50 text-green-700 rounded border border-green-200">
+                          <p className="font-medium">Nova localização selecionada:</p>
+                          <p>{editingGroup.university}, {editingGroup.city}, {editingGroup.state}</p>
+                          <p className="text-sm mt-1">Para salvar esta localização, volte para a aba de detalhes e clique em "Salvar Alterações".</p>
+                        </div>
+                      )}
+                      
+                      <div className="mt-4 flex justify-end">
+                        <button 
+                          onClick={() => setShowLocationEdit(false)}
+                          disabled={!locationSelected}
+                          className={`px-4 py-2 rounded ${
+                            locationSelected 
+                              ? 'bg-blue-500 hover:bg-blue-600 text-white' 
+                              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                          }`}
+                        >
+                          Aplicar Alteração
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+            
+            {/* Footer actions */}
+            <div className="flex justify-end space-x-2 mt-6 pt-4 border-t">
               <button 
                 onClick={cancelEditing}
-                className="bg-gray-300 hover:bg-gray-400 text-gray-800 py-2 px-4 rounded"
+                className="bg-gray-300 hover:bg-gray-400 text-gray-800 py-2 px-4 rounded transition-colors"
               >
                 Cancelar
               </button>
               <button 
                 onClick={saveEdits}
-                className="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded"
+                className="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded transition-colors"
               >
                 Salvar Alterações
               </button>
@@ -793,10 +950,28 @@ export default function GroupsPage() {
 
       {/* Groups List */}
       <div>
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold">Todos os Grupos ({groups.length})</h2>
+        <div className="mb-4">
+          <h2 className="text-xl font-semibold mb-3">Todos os Grupos ({filteredGroups.length})</h2>
           
-          {/* Add filter dropdown */}
+          {/* Add search input */}
+          <div className="mb-3">
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <input
+                type="text"
+                placeholder="Buscar por universidade, cidade, líder..."
+                className="pl-10 w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+          </div>
+          
+          {/* Filter dropdown */}
           <div className="flex items-center space-x-2">
             <label htmlFor="status-filter" className="text-sm font-medium text-gray-700">Exibir:</label>
             <select 
@@ -813,75 +988,131 @@ export default function GroupsPage() {
         </div>
         
         {isLoading ? (
-          <p className="text-gray-500">Carregando grupos...</p>
-        ) : groups.length > 0 ? (
+          <div className="flex justify-center items-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+            <span className="ml-2 text-gray-500">Carregando grupos...</span>
+          </div>
+        ) : filteredGroups.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {groups.map(group => (
-              <div key={group.id} className={`border rounded shadow-sm overflow-hidden ${!group.active ? 'bg-gray-50 opacity-75' : ''}`}>
-                <div className={`${group.active ? 'bg-gray-50' : 'bg-gray-200'} p-3 border-b flex justify-between items-center`}>
+            {filteredGroups.map(group => (
+              <div key={group.id} className={`border rounded shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md ${!group.active ? 'bg-gray-50 opacity-75' : ''}`}>
+                <div className={`${group.active ? 'bg-blue-50' : 'bg-gray-200'} p-3 border-b flex justify-between items-center`}>
                   <div>
                     <h3 className="font-bold">{group.university}</h3>
-                    <p className="text-sm">{group.city}, {group.state}</p>
+                    <p className="text-sm text-gray-600">{group.city}, {group.state}</p>
                   </div>
-                  {!group.active && (
-                    <span className="bg-gray-500 text-white text-xs px-2 py-1 rounded">Inativo</span>
-                  )}
+                  <div className="flex items-center space-x-2">
+                    {group.tipo === "Privada" && (
+                      <span className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded-full border border-purple-200">
+                        Privada
+                      </span>
+                    )}
+                    {!group.active && (
+                      <span className="bg-gray-500 text-white text-xs px-2 py-1 rounded-full">
+                        Inativo
+                      </span>
+                    )}
+                  </div>
                 </div>
                 
-                <div className="p-3 space-y-2">
-                  <p>
-                    <span className="font-medium">Localização:</span> {group.location}
-                  </p>
-                  {group.local && (
-                    <p>
-                      <span className="font-medium">Local:</span> {group.local}
-                    </p>
-                  )}
-                  {group.fulladdress && (
-                    <p>
-                      <span className="font-medium">Endereço:</span> <span className="text-sm">{group.fulladdress}</span>
-                    </p>
-                  )}
-                  <p>
-                    <span className="font-medium">Encontros:</span> {group.dayofweek} às {group.time}
-                  </p>
-                  <p>
-                    <span className="font-medium">Tipo:</span> {group.tipo === 'Publica' ? 'Pública' : 'Privada'}
-                  </p>
-                  <p>
-                    <span className="font-medium">Instagram:</span> {group.instagram}
-                  </p>
-                  <p>
-                    <span className="font-medium">Líder:</span> {group.leader.name} ({group.leader.phone})
-                    {group.leader.email && ` • ${group.leader.email}`}
-                  </p>
-                  {group.leader.curso && (
-                    <p>
-                      <span className="font-medium">Curso do Líder:</span> {group.leader.curso}
-                    </p>
-                  )}
+                <div className="p-4 space-y-3">
+                  <div className="flex items-start">
+                    <div className="text-blue-500 mr-2 mt-0.5 flex-shrink-0">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-medium">Localização</div>
+                      <div className="text-sm text-gray-600">{group.location}</div>
+                      {group.local && (
+                        <div className="text-sm text-gray-600">
+                          <span className="font-medium">Local:</span> {group.local}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-start">
+                    <div className="text-indigo-500 mr-2 mt-0.5 flex-shrink-0">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-medium">Encontros</div>
+                      <div className="text-sm text-gray-600">{group.dayofweek} às {group.time}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start">
+                    <div className="text-pink-500 mr-2 mt-0.5 flex-shrink-0">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-medium">Instagram</div>
+                      <a 
+                        href={`https://instagram.com/${group.instagram}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-sm text-blue-600 hover:underline"
+                      >
+                        @{group.instagram}
+                      </a>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start">
+                    <div className="text-green-500 mr-2 mt-0.5 flex-shrink-0">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-medium">Líder</div>
+                      <div className="text-sm text-gray-600">
+                        {group.leader.name}
+                        <div className="text-xs text-gray-500">
+                          {group.leader.phone}
+                          {group.leader.curso && ` • ${group.leader.curso}`}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 
-                <div className="bg-gray-50 p-3 border-t flex justify-end space-x-2">
+                <div className="bg-gray-50 p-3 border-t flex justify-end space-x-3">
                   <button 
                     onClick={() => startEditing(group)}
-                    className="text-blue-600 hover:text-blue-800"
+                    className="text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-50 transition duration-200 flex items-center text-sm"
                   >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
                     Editar
                   </button>
                   
                   {group.active ? (
                     <button 
                       onClick={() => deactivateGroup(group.id, group.university)}
-                      className="text-red-600 hover:text-red-800"
+                      className="text-red-600 hover:text-red-800 px-2 py-1 rounded hover:bg-red-50 transition duration-200 flex items-center text-sm"
                     >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                      </svg>
                       Desativar
                     </button>
                   ) : (
                     <button 
                       onClick={() => reactivateGroup(group.id, group.university)}
-                      className="text-green-600 hover:text-green-800"
+                      className="text-green-600 hover:text-green-800 px-2 py-1 rounded hover:bg-green-50 transition duration-200 flex items-center text-sm"
                     >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
                       Reativar
                     </button>
                   )}
@@ -890,9 +1121,10 @@ export default function GroupsPage() {
             ))}
           </div>
         ) : (
-          <div className="text-center p-8 border rounded bg-gray-50">
+          <div className="text-center py-8 border rounded bg-gray-50">
             <p className="text-gray-500">
-              {filterActive === 'active' ? 'Nenhum grupo ativo encontrado.' :
+              {searchTerm ? 'Nenhum grupo encontrado com este termo de busca.' :
+               filterActive === 'active' ? 'Nenhum grupo ativo encontrado.' :
                filterActive === 'inactive' ? 'Nenhum grupo inativo encontrado.' :
                'Nenhum grupo foi adicionado ainda.'}
             </p>
