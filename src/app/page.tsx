@@ -533,6 +533,12 @@ export default function Home() {
     setIsTyping(true);
     setSearchTerm(value);
     
+    // Reset the dropdown lock when the user starts typing
+    // This allows the suggestions dropdown to appear again for new searches
+    if (value.trim() !== searchTerm.trim()) {
+      dropdownLockRef.current = false;
+    }
+    
     // Clear any existing timeout
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
@@ -633,7 +639,7 @@ export default function Home() {
     // Set the search input's value directly
     if (searchInputRef.current) {
       searchInputRef.current.value = actualSearchTerm;
-      // Keep focus on the input
+      // Keep focus on the input but don't reopen the dropdown
       searchInputRef.current.focus();
     }
     
@@ -664,10 +670,9 @@ export default function Home() {
         }
       }, 800); // Give additional time for markers to be created and search to complete
       
-      // Release the lock after a delay to ensure all click handlers have finished
-      setTimeout(() => {
-        dropdownLockRef.current = false;
-      }, 300);
+      // Do not release the lock here - this was causing the dropdown to reopen
+      // We want to keep the lock active until the user explicitly clicks again
+      // or starts typing in the search box
     }, 50);
   };
 
@@ -831,10 +836,13 @@ export default function Home() {
     } finally {
       setIsLoading(false);
       
-      // Release the dropdown lock after a short delay
-      setTimeout(() => {
-        dropdownLockRef.current = false;
-      }, 300);
+      // Only release the dropdown lock if this wasn't a selection search
+      // This helps prevent the dropdown from reopening when a user selects an item
+      if (!forceSearch) {
+        setTimeout(() => {
+          dropdownLockRef.current = false;
+        }, 300);
+      }
     }
   };
 
@@ -893,21 +901,7 @@ export default function Home() {
     // Only run this on the client side
     if (typeof window === 'undefined' || !searchInputRef.current) return;
     
-    // Create functions to handle focus and blur
-    const handleFocus = () => {
-      console.log('Search input focused - setting typing flag');
-      isUserTypingRef.current = true;
-      window.isUserTyping = true;
-      
-      // Clear the flag after a delay to allow normal interactions again
-      setTimeout(() => {
-        if (document.activeElement !== searchInputRef.current) {
-          isUserTypingRef.current = false;
-          window.isUserTyping = false;
-        }
-      }, 500);
-    };
-    
+    // Only handle blur event since focus is handled by onFocus prop
     const handleBlur = () => {
       // Small delay to avoid immediate flag reset, which could cause focus issues
       setTimeout(() => {
@@ -916,14 +910,12 @@ export default function Home() {
       }, 300);
     };
     
-    // Add event listeners
-    searchInputRef.current.addEventListener('focus', handleFocus);
+    // Add event listener for blur only
     searchInputRef.current.addEventListener('blur', handleBlur);
     
     // Clean up
     return () => {
       if (searchInputRef.current) {
-        searchInputRef.current.removeEventListener('focus', handleFocus);
         searchInputRef.current.removeEventListener('blur', handleBlur);
       }
     };
@@ -1027,7 +1019,20 @@ export default function Home() {
                     }
                   }}
                   onFocus={() => {
-                    // Only show suggestions if not locked
+                    console.log("Search input focused - setting typing flag");
+                    isUserTypingRef.current = true;
+                    window.isUserTyping = true;
+                    
+                    // Add the timeout to reset the flag after a delay
+                    setTimeout(() => {
+                      if (document.activeElement !== searchInputRef.current) {
+                        isUserTypingRef.current = false;
+                        window.isUserTyping = false;
+                      }
+                    }, 500);
+                    
+                    // Don't show suggestions on focus if dropdown is locked
+                    // This prevents the dropdown from opening again after a selection
                     if (searchTerm.trim().length >= 2 && suggestionItems.length > 0 && !dropdownLockRef.current) {
                       setShowSuggestions(true);
                     }
