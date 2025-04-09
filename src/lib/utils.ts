@@ -1,35 +1,30 @@
-/**
- * Utility functions for the application
- */
+import { clsx, type ClassValue } from "clsx"
+import { twMerge } from "tailwind-merge"
 
-/**
- * Normalizes text by removing accents/diacritics and converting to lowercase
- * This helps with search matching across accented characters
- * 
- * @param text The text to normalize
- * @returns Normalized text (lowercase, no accents)
- */
-export function normalizeText(text: string): string {
-  if (!text) return '';
-  
-  // Convert to lowercase first
-  const lowerCase = text.toLowerCase();
-  
-  // Remove accents/diacritics
-  // This uses Unicode normalization to decompose accented characters and then removes the accent marks
-  return lowerCase.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
 }
 
 /**
- * Creates a PostgreSQL-compatible pattern for accent-insensitive search
+ * Normalizes a text string by removing diacritics and converting to lowercase
+ * for search comparison purposes.
  * 
- * @param searchTerm The search term to create a pattern for
- * @returns A pattern for case and accent insensitive search
+ * @param text The text to normalize
+ * @returns Normalized text string, or empty string if input is null/undefined
  */
-export function createSearchPattern(searchTerm: string): string {
-  // First normalize the search term
-  const normalized = normalizeText(searchTerm);
+export function normalizeText(text: string | null | undefined): string {
+  if (!text) return '';
   
-  // Create a pattern with % wildcards for partial matching
-  return `%${normalized}%`;
-} 
+  try {
+    return text
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // Remove diacritics
+      .toLowerCase()
+      .replace(/[^\w\s]/g, '') // Remove all non-alphanumeric characters except spaces
+      .replace(/\s+/g, ' ')    // Normalize multiple spaces to single space
+      .trim();
+  } catch (error) {
+    console.error('Error normalizing text:', error);
+    return text.toLowerCase().trim();
+  }
+}

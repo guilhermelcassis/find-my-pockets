@@ -1,9 +1,11 @@
 'use client';
 
 import { useAuth } from '../../lib/auth-context';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useEffect, useState, useRef } from 'react';
 import Script from 'next/script';
+import Link from 'next/link';
+import { Users, Home, Map as MapIcon, LogOut, UserCircle, Layers } from 'lucide-react';
 
 // Add the type declaration for the global guard
 declare global {
@@ -24,11 +26,27 @@ export default function AdminLayout({
 }) {
   const { user, session, loading, logOut, refreshToken } = useAuth();
   const router = useRouter();
+  const pathname = usePathname(); // Use Next.js's usePathname hook to track current path
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
-  // Add state to track whether admin check has started
   const [adminCheckStarted, setAdminCheckStarted] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const isMountedRef = useRef(true);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   useEffect(() => {
     // Set mounted ref for cleanup
@@ -116,27 +134,13 @@ export default function AdminLayout({
     return (
       <div className="min-h-screen flex justify-center items-center bg-gray-100">
         <div className="text-center">
-          <svg 
-            className="animate-spin h-10 w-10 text-blue-500 mx-auto mb-4" 
-            xmlns="http://www.w3.org/2000/svg" 
-            fill="none" 
-            viewBox="0 0 24 24"
-          >
-            <circle 
-              className="opacity-25" 
-              cx="12" 
-              cy="12" 
-              r="10" 
-              stroke="currentColor" 
-              strokeWidth="4"
-            ></circle>
-            <path 
-              className="opacity-75" 
-              fill="currentColor" 
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-            ></path>
-          </svg>
-          <p className="text-gray-600">Loading admin panel...</p>
+          <div className="relative w-16 h-16 mx-auto mb-4">
+            <div className="absolute top-0 left-0 w-full h-full rounded-full border-4 border-t-primary border-r-gray-200 border-b-gray-200 border-l-gray-200 animate-spin"></div>
+            <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center">
+              <Layers className="h-6 w-6 text-primary/80" />
+            </div>
+          </div>
+          <p className="text-gray-700 font-medium">Carregando painel de administração...</p>
         </div>
       </div>
     );
@@ -145,6 +149,14 @@ export default function AdminLayout({
   if (isAdmin === false) {
     return null; // Will redirect in the useEffect
   }
+
+  // Check if a path is active - using the pathname from usePathname() hook
+  const isActive = (path: string) => {
+    if (path === '/admin') {
+      return pathname === '/admin';
+    }
+    return pathname?.includes(path) || false;
+  };
 
   return (
     <>
@@ -156,35 +168,121 @@ export default function AdminLayout({
       />
       
       {/* Admin layout wrapper */}
-      <div className="admin-layout">
-        <header className="bg-white shadow-sm border-b">
-          <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-            <h1 className="text-lg font-semibold text-gray-900">Dunamis Pockets Admin</h1>
-            <div>
-              <span className="text-sm text-gray-600 mr-2">
-                Signed in as: {user.email}
-              </span>
-              <button
-                className="text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 py-1 px-3 rounded"
-                onClick={async () => {
-                  await logOut();
-                  router.push('/login');
-                }}
-              >
-                Sign Out
-              </button>
+      <div className="admin-layout min-h-screen bg-gray-50 flex flex-col">
+        {/* Modern single-row colored navbar */}
+        <header className="bg-gradient-to-r from-[#8b1a34] via-[#9b1f3b] to-[#8b1a34] sticky top-0 z-10 shadow-md">
+          <div className="max-w-7xl mx-auto">
+            <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
+              {/* Brand */}
+              <Link href="/admin" className="flex items-center space-x-3 shrink-0">
+                <div className="h-9 w-9 rounded-md bg-white/10 backdrop-blur-sm flex items-center justify-center shadow-md">
+                  <Layers className="h-5 w-5 text-white" />
+                </div>
+                <span className="text-lg font-bold text-white hidden sm:inline-block">
+                  Dunamis <span className="text-white/80">Pockets</span>
+                </span>
+              </Link>
+              
+              {/* Main navigation - redesigned with glass-effect pills */}
+              <nav className="flex items-center space-x-2">
+                <Link
+                  href="/admin"
+                  className={`flex items-center px-3 py-2 rounded-full text-sm font-medium transition-all duration-150 ${
+                    isActive('/admin')
+                      ? 'bg-white/20 text-white shadow-md backdrop-blur-sm'
+                      : 'text-white/80 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  <Home className={`h-4 w-4 sm:mr-2 ${isActive('/admin') ? 'text-white' : 'text-white/80'}`} />
+                  <span className="hidden sm:inline">Add Group</span>
+                </Link>
+                
+                <Link 
+                  href="/admin/leaders"
+                  className={`flex items-center px-3 py-2 rounded-full text-sm font-medium transition-all duration-150 ${
+                    isActive('/admin/leaders')
+                      ? 'bg-white/20 text-white shadow-md backdrop-blur-sm'
+                      : 'text-white/80 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  <Users className={`h-4 w-4 sm:mr-2 ${isActive('/admin/leaders') ? 'text-white' : 'text-white/80'}`} />
+                  <span className="hidden sm:inline">Líderes</span>
+                </Link>
+                
+                <Link
+                  href="/admin/groups"
+                  className={`flex items-center px-3 py-2 rounded-full text-sm font-medium transition-all duration-150 ${
+                    isActive('/admin/groups')
+                      ? 'bg-white/20 text-white shadow-md backdrop-blur-sm'
+                      : 'text-white/80 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  <MapIcon className={`h-4 w-4 sm:mr-2 ${isActive('/admin/groups') ? 'text-white' : 'text-white/80'}`} />
+                  <span className="hidden sm:inline">Grupos</span>
+                </Link>
+              </nav>
+              
+              {/* User account */}
+              <div className="relative" ref={dropdownRef}>
+                <button 
+                  className="flex items-center space-x-2 rounded-full pl-2 pr-3 py-1.5 hover:bg-white/10 transition-all duration-200"
+                  onClick={() => setDropdownOpen(!dropdownOpen)}
+                >
+                  <div className="h-8 w-8 rounded-full bg-white/10 flex items-center justify-center overflow-hidden border border-white/20">
+                    <UserCircle className="h-6 w-6 text-white" />
+                  </div>
+                  <div className="hidden sm:flex items-center">
+                    <span className="text-sm font-medium text-white max-w-[120px] truncate">
+                      {user.email?.split('@')[0]}
+                    </span>
+                  </div>
+                </button>
+                
+                {/* User dropdown */}
+                {dropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10 border border-gray-200 animate-in fade-in slide-in-from-top-5 duration-150">
+                    <div className="px-4 py-2 border-b border-gray-100">
+                      <p className="text-xs font-medium text-gray-500">Conectado como</p>
+                      <p className="text-sm text-gray-700 truncate">{user.email}</p>
+                    </div>
+                    <button
+                      className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                      onClick={async () => {
+                        await logOut();
+                        router.push('/login');
+                      }}
+                    >
+                      <LogOut className="h-4 w-4 mr-2 text-gray-500" />
+                      <span>Sair</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </header>
-        <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-          {isAuthReady ? children : (
-            <div className="text-center py-12">
-              <div className="animate-pulse">
-                <p className="text-gray-600">Finalizing authentication...</p>
+        
+        {/* Main content */}
+        <main className="flex-grow">
+          <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+            {isAuthReady ? children : (
+              <div className="text-center py-12">
+                <div className="animate-pulse">
+                  <p className="text-gray-600">Finalizando autenticação...</p>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </main>
+        
+        {/* Footer */}
+        <footer className="bg-white border-t border-gray-200 py-4">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <p className="text-center text-xs text-gray-500">
+              © {new Date().getFullYear()} Find My Pockets. Todos os direitos reservados.
+            </p>
+          </div>
+        </footer>
       </div>
     </>
   );

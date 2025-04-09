@@ -1,26 +1,219 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    /* Main colors */
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    
+    /* Card colors */
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    
+    /* Popover colors */
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    
+    /* Primary colors - Rich Burgundy/Crimson shade */
+    --primary: 350 65% 41%;
+    --primary-foreground: 210 40% 98%;
+    
+    /* Secondary colors */
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    
+    /* Muted colors */
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    
+    /* Accent colors */
+    --accent: 350 65% 95%;
+    --accent-foreground: 350 65% 30%;
+    
+    /* Destructive colors */
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    /* Border and input colors - Enhanced for better contrast */
+    --border: 350 30% 88%;
+    --input: 350 15% 90%;
+    --ring: 350 65% 41%;
+
+    /* Radii */
+    --radius: 0.5rem;
+  }
+ 
+  .dark {
+    /* Main colors */
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    
+    /* Card colors */
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    
+    /* Popover colors */
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    
+    /* Primary colors - Rich Burgundy/Crimson shade */
+    --primary: 350 65% 55%;
+    --primary-foreground: 210 40% 98%;
+    
+    /* Secondary colors */
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    
+    /* Muted colors */
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    
+    /* Accent colors */
+    --accent: 350 65% 25%;
+    --accent-foreground: 210 40% 98%;
+    
+    /* Destructive colors */
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    
+    /* Border and input colors - Enhanced for better contrast */
+    --border: 350 30% 30%;
+    --input: 350 30% 25%;
+    --ring: 350 65% 50%;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    @apply font-sans;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-medium tracking-tight;
+  }
+  h1 {
+    @apply text-3xl sm:text-4xl;
+  }
+  h2 {
+    @apply text-2xl sm:text-3xl;
+  }
+  h3 {
+    @apply text-xl sm:text-2xl;
+  }
+  h4 {
+    @apply text-lg sm:text-xl;
+  }
+  p {
+    @apply leading-relaxed;
+  }
+  /* Enhanced form elements */
+  input, select, textarea {
+    @apply rounded-md border border-input bg-transparent px-3 py-2 text-sm
+    placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1
+    focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  label {
+    @apply text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70;
+  }
+}
+
+/* Custom component styles */
+@layer components {
+  .container-page {
+    @apply w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+  
+  .section-spacing {
+    @apply my-8 md:my-12;
+  }
+  
+  .card-hover {
+    @apply transition-all duration-200 hover:shadow-md hover:border-primary/20;
+  }
+  
+  .card-base {
+    @apply bg-white rounded-lg border border-border shadow-sm overflow-hidden;
+  }
+  
+  .card-header {
+    @apply px-4 py-3 border-b border-border bg-gray-50;
+  }
+  
+  .form-input-base {
+    @apply rounded-md border border-input bg-transparent px-3 py-2 text-sm 
+    placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 
+    focus-visible:ring-ring;
+  }
+  
+  /* Buttons */
+  .btn-primary {
+    @apply bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center 
+    justify-center rounded-md font-medium transition-colors focus-visible:outline-none 
+    focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  .btn-secondary {
+    @apply bg-secondary text-secondary-foreground hover:bg-secondary/80 inline-flex items-center 
+    justify-center rounded-md font-medium transition-colors focus-visible:outline-none 
+    focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50;
+  }
+  
+  .btn-accent {
+    @apply bg-accent text-accent-foreground hover:bg-accent/90 inline-flex items-center
+    justify-center rounded-md font-medium transition-colors focus-visible:outline-none
+    focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  .btn-outline {
+    @apply border border-input bg-transparent hover:bg-accent hover:text-accent-foreground
+    inline-flex items-center justify-center rounded-md font-medium transition-colors
+    focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring
+    disabled:pointer-events-none disabled:opacity-50;
+  }
+  
+  .filter-pill {
+    @apply inline-flex items-center rounded-full px-3 py-1 text-sm font-medium transition-colors 
+    focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2;
+  }
+  
+  /* Admin Layout Components */
+  .admin-section-card {
+    @apply bg-white rounded-lg shadow-sm border border-border p-4 md:p-6;
+  }
+  
+  .admin-grid {
+    @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6;
+  }
+  
+  .admin-form-group {
+    @apply mb-4 space-y-2;
+  }
+  
+  .admin-card-stats {
+    @apply flex flex-col p-4 bg-white rounded-lg border border-border shadow-sm;
+  }
+  
+  .google-map-container {
+    @apply w-full h-full rounded-lg border border-border overflow-hidden;
+  }
+  
+  /* Additional map styling */
+  .map-wrapper {
+    position: relative;
+    width: 100%;
+    height: 450px;
+    min-height: 450px;
+  }
+  
+  /* Make sure Google Maps fills the container */
+  .gm-style {
+    height: 100%;
+  }
 }

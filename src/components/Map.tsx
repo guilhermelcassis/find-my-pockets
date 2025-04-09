@@ -599,121 +599,67 @@ const Map = forwardRef<MapRef, MapProps>(({
 
   // Function to generate formatted info window content
   const generateInfoWindowContent = (group: Group): string => {
-    // Format the meeting day and time
-    const meetingSchedule = group.dayofweek && group.time 
-      ? `${group.dayofweek} at ${group.time}`
-      : 'Contact for schedule';
-
+    // Format meeting times for display
+    const meetingSchedule = group.meetingTimes && group.meetingTimes.length > 0
+      ? group.meetingTimes.map(meeting => {
+          let meetingText = `${meeting.dayofweek} at ${meeting.time}`;
+          if (meeting.local) {
+            meetingText += ` (${meeting.local})`;
+          }
+          return meetingText;
+        }).join('<br>')
+      : 'No scheduled meetings';
+    
     // Format the leader information
-    const leaderInfo = group.leader?.name 
+    const leaderInfo = group.leader?.name
       ? `<strong>${group.leader.name}</strong>${group.leader.curso ? ` (${group.leader.curso})` : ''}`
       : 'Contact for leader information';
-
-    // Format the contact options
+    
+    // Generate contact options
     let contactOptions = '';
+    
     if (group.leader?.phone) {
-      contactOptions += `<a href="https://wa.me/${(group.leader.phone || '').replace(/\D/g, '')}" target="_blank" class="contact-btn whatsapp">WhatsApp</a>`;
-    }
-    if (group.instagram) {
-      contactOptions += `<a href="https://instagram.com/${group.instagram.replace('@', '')}" target="_blank" class="contact-btn instagram">Instagram</a>`;
+      const phoneLabel = 'Call or WhatsApp';
+      const phoneNumber = group.leader.phone.startsWith('+') ?
+        group.leader.phone.replace(/[^\d+]/g, '') :
+        group.leader.phone.replace(/\D/g, '');
+      
+      contactOptions += `
+        <a href="tel:${phoneNumber}" class="contact-button phone-button" target="_blank" rel="noopener noreferrer">
+          <div class="icon">📞</div>
+          <div class="label">${phoneLabel}</div>
+        </a>
+        <a href="https://wa.me/${phoneNumber}" class="contact-button whatsapp-button" target="_blank" rel="noopener noreferrer">
+          <div class="icon">💬</div>
+          <div class="label">WhatsApp</div>
+        </a>
+      `;
     }
     
-    if (!contactOptions) {
-      contactOptions = '<span class="no-contact">No contact information available</span>';
-    }
-
-    return `
-      <div class="info-window-content">
-        <style>
-          .info-window-content {
-            font-family: 'Roboto', Arial, sans-serif;
-            padding: 8px;
-            max-width: 300px;
-            color: #333;
-          }
-          .group-name {
-            font-size: 18px;
-            font-weight: bold;
-            color: #1a73e8;
-            margin-bottom: 8px;
-            border-bottom: 1px solid #eee;
-            padding-bottom: 8px;
-          }
-          .university {
-            font-size: 18px;
-            font-weight: bold;
-            color: #1a73e8;
-            margin-bottom: 8px;
-            border-bottom: 1px solid #eee;
-            padding-bottom: 8px;
-          }
-          .info-section {
-            margin-bottom: 6px;
-          }
-          .info-label {
-            font-weight: 600;
-            color: #555;
-          }
-          .address {
-            font-style: italic;
-            color: #666;
-            margin-bottom: 8px;
-          }
-          .meeting-info {
-            background-color: #f5f5f5;
-            padding: 6px;
-            border-radius: 4px;
-            margin-bottom: 8px;
-            font-size: 13px;
-          }
-          .contact-section {
-            margin-top: 10px;
-            border-top: 1px solid #eee;
-            padding-top: 8px;
-          }
-          .contact-options {
-            display: flex;
-            gap: 6px;
-            margin-top: 8px;
-            flex-wrap: wrap;
-          }
-          .contact-btn {
-            display: inline-block;
-            padding: 4px 8px;
-            border-radius: 4px;
-            text-decoration: none;
-            color: white;
-            font-size: 12px;
-            font-weight: 500;
-          }
-          .whatsapp {
-            background-color: #25D366;
-          }
-          .instagram {
-            background-color: #E1306C;
-          }
-          .facebook {
-            background-color: #1877F2;
-          }
-          .no-contact {
-            font-style: italic;
-            color: #999;
-            font-size: 12px;
-          }
-        </style>
-        <div class="university">${group.university || 'Independent Group'}</div>
+    if (group.instagram) {
+      const instagramUsername = group.instagram.startsWith('@') ? 
+        group.instagram.substring(1) : 
+        group.instagram;
         
-        <div class="info-section">
-          <div class="info-label">Location:</div>
-          <div>${group.city}${group.state ? `, ${group.state}` : ''}</div>
-        </div>
+      contactOptions += `
+        <a href="https://instagram.com/${instagramUsername}" class="contact-button instagram-button" target="_blank" rel="noopener noreferrer">
+          <div class="icon">📸</div>
+          <div class="label">Instagram</div>
+        </a>
+      `;
+    }
+    
+    // Return the full HTML content
+    return `
+      <div class="info-window">
+        <h3 class="university">${group.university}</h3>
+        <div class="location">${group.city}, ${group.state}</div>
         
         ${group.fulladdress ? `<div class="address">${group.fulladdress}</div>` : ''}
         
         <div class="meeting-info">
           <div class="info-label">Meetings:</div>
           <div>${meetingSchedule}</div>
-          ${group.local ? `<div>Location: ${group.local}</div>` : ''}
         </div>
         
         <div class="contact-section">

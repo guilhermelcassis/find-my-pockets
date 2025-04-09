@@ -31,16 +31,27 @@ const leadersFilePath = path.resolve(process.cwd(), 'leaders.txt');
 
 // Function to sanitize phone numbers
 function sanitizePhone(phone) {
-  // Remove all non-numeric characters
+  // Remove all non-numeric characters except the leading +
+  const hasPlus = phone.trim().startsWith('+');
   const digits = phone.replace(/\D/g, '');
   
-  // Add Brazilian country code if needed
-  if (digits.length <= 11) {
+  // If it already has a plus sign, preserve the international format
+  if (hasPlus) {
+    return `+${digits}`;
+  }
+  
+  // For Brazilian numbers (assuming 10-11 digits), add the Brazilian country code
+  if (digits.length >= 10 && digits.length <= 11) {
     return `+55${digits}`;
   }
   
-  // If it already has a country code or other format, return as is
-  return `+${digits}`;
+  // If it already has a country code or other format, add + prefix
+  if (digits.length > 11) {
+    return `+${digits}`;
+  }
+  
+  // Default case for shorter numbers (might be incomplete) - still add Brazilian code
+  return `+55${digits}`;
 }
 
 // Function to clean strings (trim, handle empty strings)

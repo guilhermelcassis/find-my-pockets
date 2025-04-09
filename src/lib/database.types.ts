@@ -11,74 +11,66 @@ export interface Leader {
   active?: boolean;
 }
 
+export interface MeetingTime {
+  id?: string;
+  dayofweek: string;
+  time: string;
+  local?: string;
+}
+
 export interface Database {
   public: {
     Tables: {
       groups: {
         Row: {
           id: string;
-          name: string;
           university: string;
           city: string;
           state: string;
           country: string;
-          location: string;
           instagram: string;
-          dayofweek: string;
-          time: string;
           leader: Leader;
           leader_id?: string;
           coordinates: Coordinates;
           tipo?: string;
-          local?: string;
           fulladdress?: string;
-          zipcode?: string;
           created_at?: string;
           updated_at?: string;
           active?: boolean;
+          meetingTimes?: MeetingTime[];
         };
         Insert: {
           id?: string;
-          name: string;
           university: string;
           city: string;
           state: string;
           country: string;
-          location: string;
           instagram: string;
-          dayofweek: string;
-          time: string;
           leader: Leader;
           leader_id?: string;
           coordinates: Coordinates;
           tipo?: string;
-          local?: string;
           fulladdress?: string;
-          zipcode?: string;
           created_at?: string;
           updated_at?: string;
           active?: boolean;
+          meetingTimes?: MeetingTime[];
         };
         Update: {
           id?: string;
-          name?: string;
           university?: string;
           city?: string;
           state?: string;
           country?: string;
-          location?: string;
           instagram?: string;
-          dayofweek?: string;
-          time?: string;
           leader?: Leader;
           leader_id?: string;
           coordinates?: Coordinates;
           tipo?: string;
-          local?: string;
           fulladdress?: string;
-          zipcode?: string;
           updated_at?: string;
           active?: boolean;
+          meetingTimes?: MeetingTime[];
         };
       };
       leaders: {

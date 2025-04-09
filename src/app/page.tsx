@@ -235,8 +235,12 @@ export default function Home() {
 
   // Function to generate suggestions from groups data
   const generateSuggestionsFromGroups = (groups: Group[], term: string): SuggestionItem[] => {
-    const normalizedTerm = normalizeText(term);
-    const suggestionsMap = new Map<string, SuggestionItem>();
+    if (!groups || groups.length === 0 || !term || term.trim().length < 2) return [];
+    
+    const normalizedTerm = normalizeText(term.trim()).toLowerCase();
+    
+    // Create a map to deduplicate suggestions - explicitly use global Map
+    const suggestionsMap = new window.Map<string, SuggestionItem>();
     
     // First filter out any inactive groups
     const activeGroups = groups.filter(group => group.active !== false);
@@ -1265,13 +1269,17 @@ export default function Home() {
                         {/* Meeting details */}
                         <div className="mt-2">
                           <p className="text-xs">
-                            <span className="font-medium">Encontros:</span> Toda {group.dayofweek} às {group.time}
+                            <span className="font-medium">Encontros:</span> {group.meetingTimes && group.meetingTimes.length > 0 ? 
+                              group.meetingTimes.map(meeting => {
+                                let meetingText = `${meeting.dayofweek} às ${meeting.time}`;
+                                if (meeting.local) {
+                                  meetingText += ` (${meeting.local})`;
+                                }
+                                return meetingText;
+                              }).join(', ') : 
+                              'Informações de horário não disponíveis'
+                            }
                           </p>
-                          {group.local && (
-                            <p className="text-xs">
-                              <span className="font-medium">Local:</span> {group.local}
-                            </p>
-                          )}
                         </div>
                         
                         {/* Contact Section */}
@@ -1288,7 +1296,11 @@ export default function Home() {
                             {/* WhatsApp Button */}
                             {group.leader?.phone && (
                               <a 
-                                href={`https://wa.me/${(group.leader.phone || '').replace(/\D/g, '')}`}
+                                href={`https://wa.me/${
+                                  group.leader.phone.startsWith('+') ? 
+                                  group.leader.phone.replace(/[^\d+]/g, '') : 
+                                  group.leader.phone.replace(/\D/g, '')
+                                }`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded text-xs inline-flex items-center"

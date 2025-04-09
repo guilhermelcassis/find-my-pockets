@@ -1,0 +1,1675 @@
+'use client';
+
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { supabase } from '../../../lib/supabase';
+import Link from 'next/link';
+import { Group } from '../../../lib/interfaces';
+import { Map as MapIcon, Users, ChevronDown } from 'lucide-react';
+import GroupList from '@/components/groups/GroupList';
+import GroupListFilter from '@/components/groups/GroupListFilter';
+import { Button } from '@/components/ui/button';
+import StatusMessage from '@/components/StatusMessage';
+import { normalizeText } from '@/lib/utils';
+
+// Flag to prevent duplicate Google Maps loading
+declare global {
+  // Tipagem será herdada de src/components/Map.tsx que já tem a tipagem correta
+  interface Window {
+    googleMapsLoaded: boolean;
+  }
+}
+
+export default function GroupsPage() {
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [statusMessage, setStatusMessage] = useState<{text: string, type: 'success' | 'error' | 'info'} | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [editingGroup, setEditingGroup] = useState<Group | null>(null);
+  const [leaders, setLeaders] = useState<{ id: string; name: string; phone: string; email: string; curso: string; active?: boolean; isAssigned: boolean; assignedGroupId: string }[]>([]);
+  const [selectedLeaderId, setSelectedLeaderId] = useState<string>('');
+  const [filterActive, setFilterActive] = useState<'all' | 'active' | 'inactive'>('active');
+  const [showLeaderDropdown, setShowLeaderDropdown] = useState<boolean>(false);
+  const [filteredLeaders, setFilteredLeaders] = useState<{ id: string; name: string; phone: string; email: string; curso: string; active?: boolean; isAssigned: boolean; assignedGroupId: string }[]>([]);
+  const [leaderSearchTerm, setLeaderSearchTerm] = useState<string>('');
+  const leaderDropdownRef = useRef<HTMLDivElement>(null); // Ref for the leader dropdown
+  const [searchTerm, setSearchTerm] = useState('');
+  const [activeTab, setActiveTab] = useState<'details' | 'location'>('details'); // For modal tabs
+  const [formErrors, setFormErrors] = useState<{[key: string]: string}>({});
+  
+  // Google Maps related states
+  const mapRef = useRef<HTMLDivElement>(null);
+  const autocompleteInputRef = useRef<HTMLInputElement>(null);
+  const [map, setMap] = useState<google.maps.Map | null>(null);
+  const [marker, setMarker] = useState<google.maps.Marker | null>(null);
+  const [locationSelected, setLocationSelected] = useState<boolean>(false);
+  const [showLocationEdit, setShowLocationEdit] = useState<boolean>(false);
+
+  // Add state variables for counts
+  const [activeCount, setActiveCount] = useState<number>(0);
+  const [inactiveCount, setInactiveCount] = useState<number>(0);
+
+  // Near the top, add the pagination state
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const ITEMS_PER_PAGE = 25;
+  const [totalCount, setTotalCount] = useState<number>(0);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const prevSearchRef = useRef<string>('');
+  const prevFilterRef = useRef<'all' | 'active' | 'inactive'>('active');
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Add this near the top of your component where other refs are defined
+  const mapInitializedRef = useRef<boolean>(false);
+  const mapLoadingRef = useRef<boolean>(false);
+
+  // Cache for leader search to improve performance
+  const leaderSearchCacheRef = useRef<{
+    term: string;
+    results: Record<string, { data: Group[]; count: number }>
+  }>({ term: '', results: {} });
+
+  // Fetch groups and leaders on component mount
+  useEffect(() => {
+    // Start with loading state
+    setIsLoading(true);
+    
+    // Define a function to load all initial data
+    const loadInitialData = async () => {
+      try {
+        // Initialize reference values to prevent duplicate fetches
+        prevSearchRef.current = searchTerm;
+        prevFilterRef.current = filterActive;
+        
+        // First load the groups
+        await fetchGroups(true);
+        
+        // Then load the leaders
+        await fetchLeaders();
+      } catch (error) {
+        console.error("Error loading initial data:", error);
+        setStatusMessage({
+          text: "Ocorreu um erro ao carregar os dados. Por favor, tente novamente.",
+          type: "error"
+        });
+      } finally {
+        // Ensure loading state is turned off when everything is done
+        setIsLoading(false);
+      }
+    };
+    
+    loadInitialData();
+    
+    // Cleanup function - reset state when component unmounts
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Fetch leaders
+  const fetchLeaders = async () => {
+    try {
+      // First get all leaders with a single query
+      const { data: leadersData, error } = await supabase
+        .from('leaders')
+        .select('*');
+      
+      if (error) throw error;
+
+      // Then get all groups to check which leaders are already assigned in a single query
+      const { data: groupsData, error: groupsError } = await supabase
+        .from('groups')
+        .select('leader_id, id')
+        .eq('active', true);
+      
+      if (groupsError) throw groupsError;
+      
+      if (leadersData) {
+        // Create a map of assigned leader IDs for O(1) lookups
+        const assignedLeaderIdsMap = groupsData.reduce((acc, group) => {
+          if (group.leader_id) {
+            acc[group.leader_id] = group.id;
+          }
+          return acc;
+        }, {} as Record<string, string>);
+        
+        const formattedLeaders = leadersData.map(leader => ({
+          id: leader.id,
+          name: leader.name,
+          phone: leader.phone,
+          email: leader.email || '',
+          curso: leader.curso || '',
+          active: leader.active ?? true,
+          isAssigned: !!assignedLeaderIdsMap[leader.id],
+          assignedGroupId: assignedLeaderIdsMap[leader.id]
+        }));
+        
+        // Sort leaders alphabetically by name for better UX
+        formattedLeaders.sort((a, b) => a.name.localeCompare(b.name));
+        
+        // Store all leaders
+        setLeaders(formattedLeaders);
+        
+        // Filter leaders for dropdown based on editing state
+        if (editingGroup) {
+          updateFilteredLeaders(formattedLeaders, editingGroup);
+        } else {
+          // Only show unassigned, active leaders if not editing
+          setFilteredLeaders(
+            formattedLeaders.filter(leader => 
+              !leader.isAssigned && leader.active !== false
+            )
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Erro ao buscar líderes:", error);
+      setStatusMessage({
+        text: `Erro ao buscar líderes: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
+        type: 'error'
+      });
+    }
+  };
+  
+  // Create a memoized function to update filtered leaders
+  const updateFilteredLeaders = useCallback((
+    allLeaders: { 
+      id: string; 
+      name: string; 
+      phone: string; 
+      email: string; 
+      curso: string; 
+      active?: boolean; 
+      isAssigned: boolean; 
+      assignedGroupId: string 
+    }[], 
+    currentGroup: Group
+  ) => {
+    const currentEditingLeaderId = currentGroup.leader_id;
+    
+    // Filter leaders list:
+    // 1. Include active leaders
+    // 2. Include the current group's leader even if inactive
+    // 3. Exclude leaders assigned to other groups
+    const availableLeaders = allLeaders.filter((leader) => 
+      (leader.active !== false) || // Include active leaders
+      (leader.id === currentEditingLeaderId) // Include current leader even if inactive
+    ).filter((leader) =>
+      !leader.isAssigned || // Include unassigned leaders
+      leader.id === currentEditingLeaderId // Include current leader even if assigned
+    );
+    
+    setFilteredLeaders(availableLeaders);
+  }, []);
+  
+  // Update filtered leaders when editing group changes
+  useEffect(() => {
+    if (editingGroup && leaders.length > 0) {
+      updateFilteredLeaders(leaders, editingGroup);
+    }
+  }, [editingGroup, leaders, updateFilteredLeaders]);
+
+  // Add back the Google Maps initialization code
+  useEffect(() => {
+    // Skip if not editing location or no editing group
+    if (!showLocationEdit || !editingGroup) {
+      return;
+    }
+    
+    let isMounted = true;
+    let mapInstance: google.maps.Map | null = null;
+    let markerInstance: google.maps.Marker | null = null;
+    
+    // Load Google Maps
+    const initializeMap = async () => {
+      // Prevent duplicate initialization
+      if (mapInitializedRef.current || mapLoadingRef.current) {
+        return;
+      }
+      
+      // Set loading flag
+      mapLoadingRef.current = true;
+      
+      try {
+        // Load the Google Maps API using our API key directly
+        const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+        
+        if (!apiKey) {
+          if (isMounted) {
+            setStatusMessage({ 
+              text: "Erro ao carregar o mapa: Chave de API do Google Maps não encontrada", 
+              type: 'error' 
+            });
+            setShowLocationEdit(false);
+          }
+          return;
+        }
+        
+        // Check if Google Maps is already loaded
+        if (!window.google || !window.google.maps) {
+          // Create and append script
+          const script = document.createElement('script');
+          script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&v=beta`;
+          script.async = true;
+          script.defer = true;
+          
+          await new Promise<void>((resolve, reject) => {
+            script.onload = () => resolve();
+            script.onerror = (e) => {
+              if (isMounted) {
+                setStatusMessage({ 
+                  text: "Erro ao carregar o mapa. Tente novamente mais tarde.", 
+                  type: 'error' 
+                });
+                setShowLocationEdit(false);
+              }
+              reject(e);
+            };
+            document.head.appendChild(script);
+          });
+        }
+        
+        // If component is unmounted during script loading, don't proceed
+        if (!isMounted || !mapRef.current) {
+          return;
+        }
+        
+        // Get coordinates from editing group
+        const coordinates = editingGroup.coordinates || {
+          latitude: -23.5505, // Default to São Paulo
+          longitude: -46.6333
+        };
+        
+        const currentLocation = { 
+          lat: coordinates.latitude, 
+          lng: coordinates.longitude
+        };
+        
+        // Create the map
+        mapInstance = new window.google.maps.Map(mapRef.current, {
+          center: currentLocation,
+          zoom: 14,
+          mapTypeControl: true,
+          fullscreenControl: false,
+          gestureHandling: 'greedy' // Make mobile usage easier
+        });
+        
+        // Create marker
+        markerInstance = new window.google.maps.Marker({
+          position: currentLocation,
+          map: mapInstance,
+          draggable: true,
+          title: "Localização selecionada"
+        });
+        
+        // Add drag end listener to marker
+        markerInstance.addListener('dragend', () => {
+          const position = markerInstance!.getPosition();
+          if (position && isMounted) {
+            const lat = position.lat();
+            const lng = position.lng();
+            
+            // Update coordinates in state
+            setEditingGroup(prev => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                coordinates: {
+                  latitude: lat,
+                  longitude: lng
+                }
+              };
+            });
+          }
+        });
+        
+        // Initialize Places Autocomplete
+        if (autocompleteInputRef.current) {
+          try {
+            // Create autocomplete with university bias
+            const autocompleteOptions = {
+              types: ['university', 'school'],
+              fields: ['name', 'address_components', 'geometry', 'formatted_address']
+            };
+            
+            const autocomplete = new window.google.maps.places.Autocomplete(
+              autocompleteInputRef.current,
+              autocompleteOptions
+            );
+            
+            autocomplete.addListener('place_changed', () => {
+              const place = autocomplete.getPlace();
+              
+              if (!place || !place.geometry || !place.geometry.location || !isMounted) {
+                return;
+              }
+              
+              const location = place.geometry.location;
+              
+              // Center the map
+              mapInstance!.setCenter(location);
+              mapInstance!.setZoom(14);
+              
+              // Update marker
+              markerInstance!.setPosition(location);
+              
+              // Extract address components
+              let city = '';
+              let state = '';
+              let country = '';
+              let zipcode = '';
+              const university = place.name || '';
+              const fulladdress = place.formatted_address || '';
+              
+              if (place.address_components) {
+                for (const component of place.address_components) {
+                  const types = component.types;
+                  
+                  if (types.includes('locality') || types.includes('postal_town')) {
+                    city = component.long_name;
+                  } else if (types.includes('administrative_area_level_2') && !city) {
+                    city = component.long_name;
+                  } else if (types.includes('administrative_area_level_1')) {
+                    state = component.long_name;
+                  } else if (types.includes('country')) {
+                    country = component.long_name;
+                  } else if (types.includes('postal_code')) {
+                    zipcode = component.long_name;
+                  }
+                }
+              }
+              
+              // If no city was found, try to extract from formatted address
+              if (!city && place.formatted_address) {
+                const addressParts = place.formatted_address.split(',');
+                if (addressParts.length >= 2) {
+                  city = addressParts[1].trim();
+                }
+              }
+              
+              // Update form with the extracted data
+              if (isMounted) {
+                setEditingGroup(prev => {
+                  if (!prev) return prev;
+                  return {
+                    ...prev,
+                    university: university,
+                    city: city || prev.city,
+                    state: state || prev.state,
+                    country: country || prev.country,
+                    fulladdress: fulladdress,
+                    coordinates: {
+                      latitude: place.geometry!.location!.lat(),
+                      longitude: place.geometry!.location!.lng()
+                    }
+                  };
+                });
+                
+                setLocationSelected(true);
+              }
+            });
+          } catch (autocompleteError) {
+            console.error("Places Autocomplete error:", autocompleteError);
+            if (isMounted) {
+              setStatusMessage({ 
+                text: "Erro ao inicializar a pesquisa de lugares.", 
+                type: 'error' 
+              });
+            }
+          }
+        }
+        
+        // Save map and marker to state
+        if (isMounted) {
+          setMap(mapInstance);
+          setMarker(markerInstance);
+          mapInitializedRef.current = true;
+        }
+      } catch (error) {
+        console.error("Map initialization error:", error);
+        if (isMounted) {
+          setStatusMessage({ 
+            text: "Erro ao inicializar o mapa. Tente novamente.", 
+            type: 'error' 
+          });
+          setShowLocationEdit(false);
+        }
+      } finally {
+        mapLoadingRef.current = false;
+      }
+    };
+    
+    // Initialize map
+    initializeMap();
+    
+    // Clean up on unmount
+    return () => {
+      isMounted = false;
+      
+      // Clean up resources
+      if (map) {
+        setMap(null);
+      }
+      
+      if (marker) {
+        setMarker(null);
+      }
+      
+      // Reset initialization flags
+      mapInitializedRef.current = false;
+      mapLoadingRef.current = false;
+    };
+  }, [editingGroup, showLocationEdit]);
+
+  // Optimize leaderSearchTerm filtering to avoid unnecessary database calls
+  const getFilteredLeadersForDisplay = useMemo(() => {
+    if (!leaderSearchTerm) return filteredLeaders;
+    
+    // Normalize search term
+    const normalizedSearchTerm = normalizeText(leaderSearchTerm.toLowerCase());
+    
+    // Filter the already filtered leaders client-side
+    return filteredLeaders.filter(leader => {
+      const normalizedName = normalizeText(leader.name.toLowerCase());
+      const normalizedCurso = normalizeText((leader.curso || '').toLowerCase());
+      const normalizedEmail = normalizeText((leader.email || '').toLowerCase());
+      const normalizedPhone = normalizeText(leader.phone.toLowerCase());
+      
+      return normalizedName.includes(normalizedSearchTerm) ||
+             normalizedCurso.includes(normalizedSearchTerm) ||
+             normalizedEmail.includes(normalizedSearchTerm) ||
+             normalizedPhone.includes(normalizedSearchTerm);
+    });
+  }, [filteredLeaders, leaderSearchTerm]);
+
+  // Function to search groups by leader name - separated for better performance
+  const searchByLeaderName = async (
+    searchTerm: string,
+    filter: 'active' | 'inactive' | 'all'
+  ): Promise<{ groups: Group[]; count: number }> => {
+    try {
+      const normalizedTerm = normalizeText(searchTerm);
+      const cacheKey = `leader-${normalizedTerm}-${filter || 'all'}`;
+      
+      // Check if we have cached results
+      if (leaderSearchCacheRef.current.results[cacheKey]) {
+        console.log('[LEADER SEARCH] Cache hit:', cacheKey);
+        const cachedResult = leaderSearchCacheRef.current.results[cacheKey];
+        return { groups: cachedResult.data, count: cachedResult.count };
+      }
+      
+      console.log('[LEADER SEARCH] Cache miss:', cacheKey);
+      
+      // Search for matching leaders
+      const { data: matchingLeaders, error: leaderError } = await supabase
+        .from('leaders')
+        .select('id, name')
+        .ilike('name', `%${normalizedTerm}%`);
+      
+      if (leaderError) {
+        console.error('Error searching leaders:', leaderError);
+        return { groups: [], count: 0 };
+      }
+      
+      if (!matchingLeaders || matchingLeaders.length === 0) {
+        // No matching leaders found
+        const emptyResult = { data: [], count: 0 };
+        
+        // Cache the empty result
+        const newCache = { ...leaderSearchCacheRef.current.results };
+        newCache[cacheKey] = emptyResult;
+        leaderSearchCacheRef.current.results = newCache;
+        
+        return { groups: [], count: 0 };
+      }
+      
+      // Extract leader IDs
+      const leaderIds = matchingLeaders.map(leader => leader.id);
+      
+      // Construct query to search for groups with these leaders
+      let query = supabase
+        .from('groups')
+        .select('*', { count: 'exact' })
+        .in('leader_id', leaderIds);
+      
+      // Apply filter for active status
+      if (filter === 'active') {
+        query = query.eq('active', true);
+      } else if (filter === 'inactive') {
+        query = query.eq('active', false);
+      }
+      
+      // Execute the query
+      const { data: groups, count, error: groupsError } = await query;
+      
+      if (groupsError) {
+        console.error('Error finding groups for leaders:', groupsError);
+        return { groups: [], count: 0 };
+      }
+      
+      const result = { data: groups || [], count: count || 0 };
+      
+      // Update the cache with the result
+      const newCache = { ...leaderSearchCacheRef.current.results };
+      newCache[cacheKey] = result;
+      leaderSearchCacheRef.current.results = newCache;
+      
+      return { groups: result.data as Group[], count: result.count };
+    } catch (error) {
+      console.error('Error in searchByLeaderName:', error);
+      return { groups: [], count: 0 };
+    }
+  };
+  
+  const fetchGroups = async (resetPage = false) => {
+    // If resetting page, update current page state
+    if (resetPage) {
+      setCurrentPage(1);
+    }
+
+    setIsLoading(true);
+
+    try {
+      // Determine if search has changed to reset the page
+      const isNewSearch = searchTerm !== prevSearchRef.current;
+      const isNewFilter = filterActive !== prevFilterRef.current;
+      
+      // Update refs with current values
+      prevSearchRef.current = searchTerm;
+      prevFilterRef.current = filterActive;
+
+      // Determine which page to fetch
+      const pageToFetch = (isNewSearch || isNewFilter) ? 1 : currentPage;
+
+      // Calculate range for pagination
+      const start = (pageToFetch - 1) * ITEMS_PER_PAGE;
+      const end = start + ITEMS_PER_PAGE - 1;
+      
+      // Create a query for active/inactive/all groups
+      let query = supabase.from('groups').select('*');
+      
+      // Filter active status if needed
+      if (filterActive === 'active') {
+        query = query.eq('active', true);
+      } else if (filterActive === 'inactive') {
+        query = query.eq('active', false);
+      }
+      
+      // If there's a search term, apply text search across multiple fields
+      if (searchTerm) {
+        console.log('[GROUP SEARCH] Searching with terms across multiple fields');
+        const normalizedTerm = `%${normalizeText(searchTerm)}%`;
+        
+        try {
+          // Create a query that searches across multiple fields using a single clean or statement
+          const searchFields = [
+            `university.ilike.${normalizedTerm}`,
+            `city.ilike.${normalizedTerm}`,
+            `state.ilike.${normalizedTerm}`,
+            `country.ilike.${normalizedTerm}`
+          ];
+          
+          query = query.or(searchFields.join(','));
+          
+        } catch (error) {
+          console.error("Error querying by text fields:", error);
+          console.error("SQL Query details:", {
+            normalizedTerm,
+            filterActive,
+            start,
+            end
+          });
+          
+          // Fallback to just getting all groups if the search fails
+          query = supabase.from('groups').select('*');
+          if (filterActive === 'active') {
+            query = query.eq('active', true);
+          } else if (filterActive === 'inactive') {
+            query = query.eq('active', false);
+          }
+        }
+      }
+      
+      // Apply pagination and sorting
+      query = query.order('university', { ascending: true })
+        .range(start, end);
+      
+      // Execute the query
+      const { data: fetchedGroups, error, count } = await query;
+      
+      if (error) {
+        throw error;
+      }
+      
+      setGroups(fetchedGroups || []);
+      setCurrentPage(pageToFetch);
+      setTotalCount(count || 0);
+      
+      // If there's a search term but no results, try searching by leader name
+      if (searchTerm && fetchedGroups && fetchedGroups.length === 0) {
+        const { groups: groupsByLeader, count: leaderCount } = await searchByLeaderName(searchTerm, filterActive);
+        
+        if (groupsByLeader.length > 0) {
+          setGroups(groupsByLeader);
+          setTotalCount(leaderCount);
+        }
+      }
+      
+      setIsLoading(false);
+    } catch (error) {
+      console.error("Erro ao buscar grupos:", error);
+      
+      // Log detailed information for debugging
+      console.error("Error details:", {
+        searchTerm,
+        filterActive,
+        currentPage,
+        pagination: { 
+          start: (currentPage - 1) * ITEMS_PER_PAGE,
+          end: (currentPage - 1) * ITEMS_PER_PAGE + ITEMS_PER_PAGE - 1 
+        }
+      });
+      
+      // Set empty results and stop loading
+      setGroups([]);
+      setTotalCount(0);
+      setIsLoading(false);
+      
+      // Show error message to user
+      setStatusMessage({
+        text: `Erro ao buscar grupos: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
+        type: 'error'
+      });
+    }
+  };
+
+  const handleFilterChange = (filter: 'all' | 'active' | 'inactive') => {
+    if (filter === filterActive) return; // No change, don't trigger a re-fetch
+    setFilterActive(filter);
+    // The useEffect will handle fetching with the new filter
+  };
+
+  const handleSearchChange = (value: string) => {
+    console.log(`Search term changed to: "${value}"`);
+    
+    // Clear status message when starting a new search
+    if (statusMessage && statusMessage.type === 'error') {
+      setStatusMessage(null);
+    }
+    
+    // Update the search term state
+    setSearchTerm(value);
+    // The useEffect will handle debouncing and fetching
+  };
+
+  const deactivateGroup = async (id: string, university: string) => {
+    if (!confirm(`Tem certeza que deseja desativar o grupo em ${university}? Você poderá reativá-lo depois.`)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('groups')
+        .update({ active: false })
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      setStatusMessage({ text: `Grupo em ${university} desativado com sucesso`, type: 'success' });
+      fetchGroups(false);
+    } catch (error) {
+      console.error("Erro ao desativar grupo:", error);
+      setStatusMessage({ text: `Erro ao desativar grupo: ${error instanceof Error ? error.message : 'Erro desconhecido'}`, type: 'error' });
+    }
+  };
+  
+  const reactivateGroup = async (id: string, university: string) => {
+    if (!confirm(`Deseja reativar o grupo em ${university}?`)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('groups')
+        .update({ active: true })
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      setStatusMessage({ text: `Grupo em ${university} reativado com sucesso`, type: 'success' });
+      fetchGroups(false);
+    } catch (error) {
+      console.error("Erro ao reativar grupo:", error);
+      setStatusMessage({ text: `Erro ao reativar grupo: ${error instanceof Error ? error.message : 'Erro desconhecido'}`, type: 'error' });
+    }
+  };
+
+  const handleToggleActive = (id: string, university: string, currentStatus: boolean) => {
+    if (currentStatus) {
+      deactivateGroup(id, university);
+    } else {
+      reactivateGroup(id, university);
+    }
+  };
+  
+  const startEditing = (group: Group) => {
+    // Reset map initialization flags to ensure proper reinitialization
+    mapInitializedRef.current = false;
+    mapLoadingRef.current = false;
+    
+    // Clear previous map instances
+    if (map) {
+      setMap(null);
+    }
+    if (marker) {
+      setMarker(null);
+    }
+    
+    // Make sure we have valid coordinates to prevent errors
+    const safeCoordinates = {
+      latitude: group.coordinates?.latitude || 0,
+      longitude: group.coordinates?.longitude || 0
+    };
+    
+    // Create a complete copy of the group with all required fields
+    setEditingGroup({
+      ...group,
+      coordinates: safeCoordinates,
+      instagram: group.instagram || '',
+      tipo: group.tipo || 'Publica',
+      active: group.active !== false
+    });
+    
+    setShowLocationEdit(false);
+    setLocationSelected(false);
+    setActiveTab('details'); // Ensure we start on the details tab
+    
+    // Find the leader ID based on the leader data in the group
+    const leaderInGroup = group.leader;
+    const foundLeader = leaders.find(leader => 
+      leader.name === leaderInGroup.name && 
+      leader.phone === leaderInGroup.phone
+    );
+    
+    if (foundLeader) {
+      setSelectedLeaderId(foundLeader.id);
+      setLeaderSearchTerm(foundLeader.name); // Set the search term to the leader's name
+    } else {
+      setSelectedLeaderId('');
+      setLeaderSearchTerm(''); // Clear the search term
+    }
+    
+    // Reset form errors when starting edit
+    setFormErrors({});
+  };
+  
+  const cancelEditing = () => {
+    // Reset all relevant state
+    setEditingGroup(null);
+    setShowLocationEdit(false);
+    setLocationSelected(false);
+    setSelectedLeaderId('');
+    setLeaderSearchTerm('');
+    
+    // Clean up map resources
+    if (map) {
+      setMap(null);
+    }
+    if (marker) {
+      setMarker(null);
+    }
+    
+    // Reset initialization flags
+    mapInitializedRef.current = false;
+    mapLoadingRef.current = false;
+  };
+  
+  // Add validation function for the form
+  const validateGroupForm = () => {
+    const errors: {[key: string]: string} = {};
+    
+    if (!selectedLeaderId) {
+      errors.leader = "É necessário selecionar um líder";
+    }
+    
+    // Check if meetingTimes array has at least one valid meeting
+    if (!editingGroup?.meetingTimes || editingGroup.meetingTimes.length === 0) {
+      errors.meetingTimes = "É necessário adicionar pelo menos um horário de encontro";
+    } else {
+      // Check if all meeting times have required fields
+      const invalidMeetings = editingGroup.meetingTimes.filter(
+        m => !m.dayofweek || !m.time
+      );
+      
+      if (invalidMeetings.length > 0) {
+        errors.meetingTimes = "Todos os horários precisam ter dia da semana e hora definidos";
+      }
+    }
+    
+    if (!editingGroup?.instagram || editingGroup.instagram.trim() === '') {
+      errors.instagram = "Instagram é obrigatório";
+    } else if (editingGroup.instagram.startsWith('@')) {
+      errors.instagram = "Não inclua o @ no início do nome de usuário";
+    }
+    
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+  
+  const saveEdits = async () => {
+    if (!editingGroup) return;
+    
+    try {
+      // Validate form
+      if (!validateGroupForm()) {
+        setStatusMessage({ text: "Corrija os erros no formulário antes de salvar", type: 'error' });
+        return;
+      }
+      
+      // Find the selected leader
+      const selectedLeader = leaders.find(leader => leader.id === selectedLeaderId);
+      if (!selectedLeader) {
+        throw new Error("Líder selecionado não encontrado");
+      }
+      
+      // Prepare update data with all editable fields
+      const updateData = {
+        instagram: editingGroup.instagram.startsWith('@') 
+          ? editingGroup.instagram.substring(1) // Remove @ if user added it
+          : editingGroup.instagram,
+        tipo: editingGroup.tipo || 'Publica',
+        meetingTimes: editingGroup.meetingTimes,
+        leader: {
+          name: selectedLeader.name,
+          phone: selectedLeader.phone,
+          email: selectedLeader.email || '',
+          curso: selectedLeader.curso || '',
+          active: selectedLeader.active ?? true
+        },
+        leader_id: selectedLeaderId,
+        coordinates: editingGroup.coordinates,
+        active: editingGroup.active ?? true,
+        updated_at: new Date().toISOString()
+      };
+      
+      // If university was changed, update related fields
+      if (locationSelected) {
+        Object.assign(updateData, {
+          university: editingGroup.university,
+          city: editingGroup.city,
+          state: editingGroup.state,
+          country: editingGroup.country,
+          fulladdress: editingGroup.fulladdress || '',
+        });
+      }
+      
+      const { error } = await supabase
+        .from('groups')
+        .update(updateData)
+        .eq('id', editingGroup.id);
+      
+      if (error) throw error;
+      
+      setStatusMessage({ text: `Grupo em ${editingGroup.university} atualizado com sucesso`, type: 'success' });
+      setEditingGroup(null);
+      setShowLocationEdit(false);
+      setLocationSelected(false);
+      setSelectedLeaderId('');
+      setFormErrors({});
+      setActiveTab('details');
+      fetchGroups(false);
+    } catch (error) {
+      console.error("Erro ao atualizar grupo:", error);
+      setStatusMessage({ text: `Erro ao atualizar grupo: ${error instanceof Error ? error.message : 'Erro desconhecido'}`, type: 'error' });
+    }
+  };
+
+  // Add an effect for search debouncing
+  useEffect(() => {
+    // Skip on initial render to avoid redundant API calls
+    const isInitialRender = prevSearchRef.current === '' && prevFilterRef.current === 'active' && 
+      (searchTerm === '' || searchTerm === prevSearchRef.current) && filterActive === prevFilterRef.current;
+    
+    if (isInitialRender) {
+      return;
+    }
+    
+    console.log("Search/filter changed:", {
+      searchTerm,
+      prevSearchTerm: prevSearchRef.current,
+      filterActive,
+      prevFilter: prevFilterRef.current,
+      isDebouncing: !!debounceTimeoutRef.current
+    });
+    
+    // Clear previous timeouts
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+    
+    // Show loading indicator immediately on search change
+    if (searchTerm !== prevSearchRef.current) {
+      setIsLoading(true);
+    }
+    
+    // Debounce search with increased time to reduce database load
+    debounceTimeoutRef.current = setTimeout(() => {
+      console.log("Debounce timeout triggered, fetching groups with:", {
+        searchTerm,
+        filterActive
+      });
+      try {
+        fetchGroups(true); // Reset to page 1 when search or filter changes
+      } catch (error) {
+        console.error("Error in search debounce:", error);
+        setIsLoading(false);
+        setStatusMessage({
+          text: "Ocorreu um erro ao buscar os grupos. Por favor, tente novamente.",
+          type: 'error'
+        });
+      }
+    }, 500); // Increased from 300ms to 500ms for better performance
+    
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+    };
+  }, [searchTerm, filterActive]);
+  
+  // Add a handler for page navigation
+  const handlePageChange = (pageNumber: number) => {
+    setCurrentPage(pageNumber);
+    // Fetch next page of data
+    fetchGroups(false);
+    // Scroll to top when changing pages
+    window.scrollTo(0, 0);
+  };
+
+  // Replace the complex filteredGroups logic with a simpler version that uses the server-filtered data
+  const filteredGroups = useMemo(() => groups, [groups]);
+
+  // Update the pagination to use totalCount from server
+  const paginatedGroups = useMemo(() => groups, [groups]);
+
+  // Add handler for next page
+  const handleNextPage = () => {
+    const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
+    if (currentPage < totalPages) {
+      handlePageChange(currentPage + 1);
+    }
+  };
+  
+  // Add handler for previous page
+  const handlePreviousPage = () => {
+    if (currentPage > 1) {
+      handlePageChange(currentPage - 1);
+    }
+  };
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterActive]);
+
+  // Auto-dismiss status messages after 5 seconds
+  useEffect(() => {
+    if (statusMessage && (statusMessage.type === 'success' || statusMessage.type === 'info')) {
+      const timer = setTimeout(() => {
+        setStatusMessage(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [statusMessage]);
+
+  // Add click outside handler for leader dropdown
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (leaderDropdownRef.current && !leaderDropdownRef.current.contains(event.target as Node)) {
+        setShowLeaderDropdown(false);
+      }
+    }
+
+    // Add event listener when dropdown is open
+    if (showLeaderDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    
+    // Cleanup event listener
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showLeaderDropdown]);
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setFilterActive('all');
+  };
+
+  // Function to filter leaders based on search term
+  const filterLeadersBySearch = (leaders: any[], searchTerm: string) => {
+    if (!searchTerm) return leaders;
+    
+    // Normalize search term (remove accents, lowercase)
+    const normalizedSearchTerm = normalizeText(searchTerm);
+    
+    // If search term is empty after normalization, return all leaders
+    if (!normalizedSearchTerm) return leaders;
+
+    // Simple filtering similar to the leaders page implementation
+    return leaders.filter(leader => {
+      const normalizedName = normalizeText(leader.name || '');
+      const normalizedCurso = normalizeText(leader.curso || '');
+      const normalizedEmail = normalizeText(leader.email || '');
+      const normalizedPhone = normalizeText(leader.phone || '');
+
+      return normalizedName.includes(normalizedSearchTerm) ||
+             normalizedCurso.includes(normalizedSearchTerm) ||
+             normalizedEmail.includes(normalizedSearchTerm) ||
+             normalizedPhone.includes(normalizedSearchTerm)
+    }).sort((a, b) => {
+      // Sort alphabetically by name
+      return a.name.localeCompare(b.name);
+    });
+  };
+
+  // Update leaders filtering when editing
+  useEffect(() => {
+    if (editingGroup) {
+      const currentEditingLeaderId = editingGroup.leader_id;
+      
+      // Get array of leader_ids that are already assigned to active groups
+      const getAssignedLeaderIds = async () => {
+        try {
+          const { data: groupsData, error: groupsError } = await supabase
+            .from('groups')
+            .select('leader_id')
+            .eq('active', true);
+          
+          if (groupsError) throw groupsError;
+          
+          const assignedLeaderIds = groupsData
+            .filter(group => group.leader_id && group.leader_id !== currentEditingLeaderId)
+            .map(group => group.leader_id);
+          
+          // Filter leaders list: include active leaders and the current group's leader
+          let availableLeaders = leaders.filter(leader => 
+            (leader.active !== false) || // Include active leaders
+            (leader.id === currentEditingLeaderId) // Include current leader even if inactive
+          );
+          
+          // Filter out leaders that are already assigned to OTHER groups
+          availableLeaders = availableLeaders.filter(leader => 
+            !assignedLeaderIds.includes(leader.id) || 
+            leader.id === currentEditingLeaderId
+          );
+          
+          // Sort alphabetically by name for better UX
+          availableLeaders.sort((a, b) => a.name.localeCompare(b.name));
+          
+          setFilteredLeaders(availableLeaders);
+        } catch (error) {
+          console.error("Error getting assigned leaders:", error);
+        }
+      };
+      
+      getAssignedLeaderIds();
+    }
+  }, [editingGroup, leaders]);
+  
+  // Filter leaders based on search term, but only temporarily affect displayed results
+  useEffect(() => {
+    // Only apply search filtering when editing and if search term exists
+    if (editingGroup && leaderSearchTerm) {
+      // Search is handled by filterLeadersBySearch, filter UI will use the result directly
+      // No need to update filteredLeaders state which holds all eligible leaders
+    } else if (editingGroup) {
+      // If search is cleared, we need to restore the full list of eligible leaders
+      const currentEditingLeaderId = editingGroup.leader_id;
+      
+      const getAssignedLeaderIds = async () => {
+        try {
+          const { data: groupsData, error: groupsError } = await supabase
+            .from('groups')
+            .select('leader_id')
+            .eq('active', true);
+          
+          if (groupsError) throw groupsError;
+          
+          const assignedLeaderIds = groupsData
+            .filter(group => group.leader_id && group.leader_id !== currentEditingLeaderId)
+            .map(group => group.leader_id);
+          
+          let availableLeaders = leaders.filter(leader => 
+            leader.active !== false || 
+            leader.id === currentEditingLeaderId
+          );
+          
+          availableLeaders = availableLeaders.filter(leader => 
+            !assignedLeaderIds.includes(leader.id) || 
+            leader.id === currentEditingLeaderId
+          );
+          
+          availableLeaders.sort((a, b) => a.name.localeCompare(b.name));
+          
+          setFilteredLeaders(availableLeaders);
+        } catch (error) {
+          console.error("Error restoring leader list:", error);
+        }
+      };
+      
+      getAssignedLeaderIds();
+    }
+  }, [leaderSearchTerm, editingGroup, leaders]);
+
+  // Add effect to handle tab changes
+  useEffect(() => {
+    // If switching to location tab, initialize map controls
+    if (activeTab === 'location' && editingGroup) {
+      // Reset map initialization flags if needed
+      if (mapInitializedRef.current) {
+        return; // Map is already initialized, no need to reinitialize
+      }
+      
+      setShowLocationEdit(true); // Show map edit controls when switching to location tab
+    }
+  }, [activeTab, editingGroup]);
+
+  return (
+    <div className="min-h-screen">
+      {statusMessage && (
+        <StatusMessage 
+          type={statusMessage.type} 
+          text={statusMessage.text} 
+          onClose={() => setStatusMessage(null)} 
+        />
+      )}
+      
+      <div className="mb-6">
+        <div>
+          {/* Groups List Section */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+              <h2 className="text-lg font-medium text-gray-800 flex items-center justify-center">
+                <MapIcon className="h-5 w-5 mr-2 text-primary/70" />
+                Lista de Grupos {isLoading ? (
+                  <span className="inline-flex items-center ml-2">
+                    <span className="w-3 h-3 border-t-2 border-primary rounded-full animate-spin ml-2 mr-1"></span>
+                    <span className="text-sm text-gray-500">Carregando...</span>
+                  </span>
+                ) : (
+                  `(${filteredGroups.length})`
+                )}
+              </h2>
+            </div>
+            
+            <div className="p-4">
+              <GroupListFilter 
+                totalCount={activeCount + inactiveCount}
+                activeFilter={filterActive}
+                searchTerm={searchTerm}
+                onFilterChange={handleFilterChange}
+                onSearchChange={handleSearchChange}
+                activeCount={activeCount}
+                inactiveCount={inactiveCount}
+              />
+              
+              <GroupList 
+                groups={paginatedGroups}
+                isLoading={isLoading}
+                searchTerm={searchTerm}
+                filterActive={filterActive}
+                onEdit={startEditing}
+                onToggleActive={handleToggleActive}
+                onSearchChange={handleSearchChange}
+              />
+              
+              {/* Pagination */}
+              {filteredGroups.length > ITEMS_PER_PAGE && (
+                <div className="flex justify-between items-center border-t border-gray-200 px-4 py-3 mt-4">
+                  <div className="hidden sm:block">
+                    <p className="text-sm text-gray-700">
+                      Mostrando <span className="font-medium">{((currentPage - 1) * ITEMS_PER_PAGE) + 1}</span> a <span className="font-medium">{Math.min(currentPage * ITEMS_PER_PAGE, filteredGroups.length)}</span> de <span className="font-medium">{filteredGroups.length}</span> grupos
+                    </p>
+                  </div>
+                  <div className="flex justify-between sm:justify-end gap-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handlePreviousPage}
+                      disabled={currentPage === 1}
+                      className="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      Anterior
+                    </Button>
+                    <div className="hidden md:flex gap-1">
+                      {Array.from({ length: Math.min(5, Math.ceil(filteredGroups.length / ITEMS_PER_PAGE)) }).map((_, idx) => {
+                        // Calculate page number with logic for showing pages around current page
+                        const totalPages = Math.ceil(filteredGroups.length / ITEMS_PER_PAGE);
+                        let pageNumber: number;
+                        
+                        if (totalPages <= 5) {
+                          // If 5 or fewer pages, show all pages
+                          pageNumber = idx + 1;
+                        } else if (currentPage <= 3) {
+                          // Near start: show first 5 pages
+                          pageNumber = idx + 1;
+                        } else if (currentPage >= totalPages - 2) {
+                          // Near end: show last 5 pages
+                          pageNumber = totalPages - 4 + idx;
+                        } else {
+                          // Middle: show current +/- 2 pages
+                          pageNumber = currentPage - 2 + idx;
+                        }
+                        
+                        return (
+                          <Button
+                            key={pageNumber}
+                            variant={currentPage === pageNumber ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => handlePageChange(pageNumber)}
+                            className={`w-9 h-9 ${
+                              currentPage === pageNumber 
+                                ? 'bg-primary text-white border-primary' 
+                                : 'bg-white text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            {pageNumber}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleNextPage}
+                      disabled={currentPage === Math.ceil(filteredGroups.length / ITEMS_PER_PAGE)}
+                      className="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      Próximo
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Edit Group Modal */}
+      {editingGroup && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+            <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-gray-800">
+                Editar Grupo - {editingGroup.university}
+              </h2>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={cancelEditing}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                &times;
+              </Button>
+            </div>
+
+            <div className="p-6">
+              {/* Tabs */}
+              <div className="flex border-b border-gray-200 mb-6">
+                    <button 
+                  className={`py-2 px-4 font-medium text-sm ${
+                    activeTab === 'details'
+                      ? 'text-primary border-b-2 border-primary'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                  onClick={() => setActiveTab('details')}
+                >
+                  Detalhes
+                </button>
+                <button
+                  className={`py-2 px-4 font-medium text-sm ${
+                    activeTab === 'location'
+                      ? 'text-primary border-b-2 border-primary'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                  onClick={() => setActiveTab('location')}
+                >
+                  Localização
+                    </button>
+                  </div>
+                  
+              {/* Details Tab */}
+              {activeTab === 'details' && (
+                <div className="space-y-6">
+                  {/* Leader Selection */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Líder *
+                      </label>
+                      <div className="relative" ref={leaderDropdownRef}>
+                        <input
+                          type="text"
+                          className={`w-full px-4 py-2 text-sm rounded-md border ${
+                            formErrors.leader ? 'border-red-500' : 'border-gray-300'
+                          } focus:outline-none focus:ring-2 focus:ring-primary pr-8`}
+                          placeholder="Selecione ou digite para buscar um líder"
+                          value={leaderSearchTerm}
+                          onChange={(e) => {
+                            setLeaderSearchTerm(e.target.value);
+                            if (!showLeaderDropdown) {
+                              setShowLeaderDropdown(true);
+                            }
+                          }}
+                          onFocus={() => setShowLeaderDropdown(true)}
+                        />
+                        <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                          <ChevronDown className="h-4 w-4 text-gray-400" />
+                    </div>
+                    
+                        {formErrors.leader && (
+                          <p className="mt-1 text-sm text-red-500">{formErrors.leader}</p>
+                        )}
+                        
+                        {showLeaderDropdown && (
+                          <div className="absolute z-10 mt-1 w-full bg-white shadow-lg max-h-60 rounded-md py-1 text-sm overflow-auto">
+                            {getFilteredLeadersForDisplay.length > 0 ? (
+                              getFilteredLeadersForDisplay.map(leader => {
+                                // Normalize text for comparison
+                                const normalizedSearchTerm = normalizeText(leaderSearchTerm);
+                                const normalizedName = normalizeText(leader.name);
+                                const normalizedCurso = normalizeText(leader.curso || '');
+                                
+                                return (
+                                  <button
+                                    key={leader.id}
+                                    className={`w-full px-4 py-2 text-left hover:bg-gray-100 flex flex-col ${
+                                      selectedLeaderId === leader.id ? 'bg-primary/5 border-l-2 border-primary' : ''
+                                    }`}
+                                    onClick={() => {
+                                      setSelectedLeaderId(leader.id);
+                                      setLeaderSearchTerm(leader.name);
+                                      setShowLeaderDropdown(false);
+                                    }}
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <span className="font-medium truncate max-w-[70%]">
+                                        {(() => {
+                                          if (!normalizedSearchTerm) return leader.name;
+                                          
+                                          const index = normalizedName.indexOf(normalizedSearchTerm);
+                                          if (index === -1) return leader.name;
+                                          
+                                          const before = leader.name.substring(0, index);
+                                          const match = leader.name.substring(index, index + leaderSearchTerm.length);
+                                          const after = leader.name.substring(index + leaderSearchTerm.length);
+                                          
+                                          return (
+                                            <>
+                                              {before}
+                                              <span className="bg-yellow-100 font-medium">{match}</span>
+                                              {after}
+                                            </>
+                                          );
+                                        })()}
+                                      </span>
+                                      {leader.active !== false ? (
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                          Ativo
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                                          Inativo
+                                        </span>
+                                      )}
+                    </div>
+                                    {leader.curso && (
+                                      <span className="text-gray-500 text-xs mt-0.5 truncate block">
+                                        {(() => {
+                                          if (!normalizedSearchTerm) return leader.curso;
+                                          
+                                          const index = normalizedCurso.indexOf(normalizedSearchTerm);
+                                          if (index === -1) return leader.curso;
+                                          
+                                          const before = leader.curso.substring(0, index);
+                                          const match = leader.curso.substring(index, index + leaderSearchTerm.length);
+                                          const after = leader.curso.substring(index + leaderSearchTerm.length);
+                                          
+                                          return (
+                                            <>
+                                              {before}
+                                              <span className="bg-yellow-100 font-medium">{match}</span>
+                                              {after}
+                                            </>
+                                          );
+                                        })()}
+                                      </span>
+                                    )}
+                                  </button>
+                                );
+                              })
+                            ) : (
+                              <div className="px-4 py-3 text-gray-500 text-center">
+                                {leaderSearchTerm ? (
+                                  <>Nenhum líder encontrado com <strong>"{leaderSearchTerm}"</strong></>
+                                ) : (
+                                  <>Nenhum líder disponível</>
+                                )}
+                      </div>
+                    )}
+                    </div>
+                        )}
+                  </div>
+                </div>
+                
+                    {/* Meeting Times Editor */}
+                    <div>
+                      <div className="flex justify-between items-center mb-2">
+                        <label className="block text-sm font-medium text-gray-700">
+                          Horários de Encontro *
+                        </label>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            // Add new meeting time
+                            setEditingGroup({
+                              ...editingGroup,
+                              meetingTimes: [
+                                ...(editingGroup.meetingTimes || []),
+                                { dayofweek: '', time: '', local: '' }
+                              ]
+                            });
+                          }}
+                          className="text-xs"
+                        >
+                          Adicionar Horário
+                        </Button>
+                      </div>
+                      
+                      {formErrors.meetingTimes && (
+                        <p className="mt-1 text-sm text-red-500 mb-2">{formErrors.meetingTimes}</p>
+                      )}
+                      
+                      {/* Render meeting times */}
+                      {editingGroup.meetingTimes && editingGroup.meetingTimes.length > 0 ? (
+                        <div className="space-y-3">
+                          {editingGroup.meetingTimes.map((meeting, index) => (
+                            <div key={index} className="border border-gray-200 rounded-md p-3 bg-gray-50">
+                              <div className="flex justify-between items-center mb-2">
+                                <h4 className="text-sm font-medium">Horário {index + 1}</h4>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    // Remove this meeting time
+                                    const updatedMeetings = [...editingGroup.meetingTimes];
+                                    updatedMeetings.splice(index, 1);
+                                    setEditingGroup({
+                                      ...editingGroup,
+                                      meetingTimes: updatedMeetings
+                                    });
+                                  }}
+                                  className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                </Button>
+                              </div>
+                              
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                {/* Day of week */}
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                                    Dia da semana *
+                                  </label>
+                                  <select
+                                    value={meeting.dayofweek || ''}
+                                    onChange={(e) => {
+                                      const updatedMeetings = [...editingGroup.meetingTimes];
+                                      updatedMeetings[index] = {
+                                        ...meeting,
+                                        dayofweek: e.target.value
+                                      };
+                                      setEditingGroup({
+                                        ...editingGroup,
+                                        meetingTimes: updatedMeetings
+                                      });
+                                    }}
+                                    className="w-full px-3 py-1 text-sm rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary"
+                                  >
+                                    <option value="">Selecione</option>
+                                    <option value="Segunda-feira">Segunda-feira</option>
+                                    <option value="Terça-feira">Terça-feira</option>
+                                    <option value="Quarta-feira">Quarta-feira</option>
+                                    <option value="Quinta-feira">Quinta-feira</option>
+                                    <option value="Sexta-feira">Sexta-feira</option>
+                                    <option value="Sábado">Sábado</option>
+                                    <option value="Domingo">Domingo</option>
+                                  </select>
+                                </div>
+                                
+                                {/* Time */}
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                                    Horário *
+                                  </label>
+                                  <input
+                                    type="time"
+                                    value={meeting.time || ''}
+                                    onChange={(e) => {
+                                      const updatedMeetings = [...editingGroup.meetingTimes];
+                                      updatedMeetings[index] = {
+                                        ...meeting,
+                                        time: e.target.value
+                                      };
+                                      setEditingGroup({
+                                        ...editingGroup,
+                                        meetingTimes: updatedMeetings
+                                      });
+                                    }}
+                                    className="w-full px-3 py-1 text-sm rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary"
+                                  />
+                                </div>
+                                
+                                {/* Location */}
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                                    Local (opcional)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={meeting.local || ''}
+                                    onChange={(e) => {
+                                      const updatedMeetings = [...editingGroup.meetingTimes];
+                                      updatedMeetings[index] = {
+                                        ...meeting,
+                                        local: e.target.value
+                                      };
+                                      setEditingGroup({
+                                        ...editingGroup,
+                                        meetingTimes: updatedMeetings
+                                      });
+                                    }}
+                                    placeholder="Ex: Bloco A, Sala 101"
+                                    className="w-full px-3 py-1 text-sm rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="border border-dashed border-gray-300 rounded-md p-4 text-center bg-gray-50">
+                          <p className="text-gray-500 text-sm">Nenhum horário adicionado. Clique em "Adicionar Horário" para começar.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Instagram */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Instagram *
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <span className="text-gray-500">@</span>
+                    </div>
+                    <input
+                      type="text"
+                      value={editingGroup.instagram || ''}
+                      onChange={e => setEditingGroup({...editingGroup, instagram: e.target.value})}
+                      className={`w-full pl-8 pr-4 py-2 rounded-md border ${
+                        formErrors.instagram ? 'border-red-500' : 'border-gray-300'
+                      } focus:outline-none focus:ring-2 focus:ring-primary`}
+                      placeholder="instagram_username"
+                    />
+                  </div>
+                  {formErrors.instagram && (
+                    <p className="mt-1 text-sm text-red-500">{formErrors.instagram}</p>
+                  )}
+                </div>
+                
+                {/* Institution Type */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tipo de instituição
+                  </label>
+                  <div className="flex space-x-4">
+                    <label className="inline-flex items-center">
+                      <input 
+                        type="radio"
+                        className="form-radio text-primary"
+                        name="institutionType"
+                        value="Publica"
+                        checked={editingGroup.tipo !== 'Privada'}
+                        onChange={() => setEditingGroup({...editingGroup, tipo: 'Publica'})}
+                      />
+                      <span className="ml-2">Pública</span>
+                    </label>
+                    <label className="inline-flex items-center">
+                      <input
+                        type="radio"
+                        className="form-radio text-primary"
+                        name="institutionType"
+                        value="Privada"
+                        checked={editingGroup.tipo === 'Privada'}
+                        onChange={() => setEditingGroup({...editingGroup, tipo: 'Privada'})}
+                      />
+                      <span className="ml-2">Privada</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+} 
