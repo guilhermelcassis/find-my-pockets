@@ -94,6 +94,10 @@ export default function Home() {
   const [searchType, setSearchType] = useState<'university' | 'city' | 'state' | 'country' | null>(null);
   const [filteredGroups, setFilteredGroups] = useState<Group[]>([]);
   
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
+  
   // Client-side only state with explicit initialization
   const [isClient, setIsClient] = useState(false);
   const [mobileView, setMobileView] = useState<'map' | 'list'>('map');
@@ -1220,7 +1224,13 @@ export default function Home() {
                   {showSuggestions && (
                     <div
                       ref={suggestionsRef}
-                      className="absolute left-0 right-0 mt-2 bg-white/90 backdrop-blur-md rounded-xl shadow-2xl z-50 max-h-80 overflow-y-auto border border-gray-100"
+                      className="absolute left-0 right-0 mt-2 bg-white/95 backdrop-blur-lg rounded-xl shadow-2xl z-[100] overflow-y-auto border border-gray-100"
+                      style={{ 
+                        maxHeight: '65vh', // Use viewport height instead of fixed pixels
+                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+                        position: 'relative',
+                        transform: 'translateZ(0)' // Force hardware acceleration for better rendering
+                      }}
                     >
                       {isLoadingSuggestions ? (
                         <div className="p-4 text-gray-500 text-sm flex justify-center items-center">
@@ -1233,8 +1243,8 @@ export default function Home() {
                             const isSelected = searchType === suggestion.type && searchTerm === suggestion.text;
                             
                             return (
-                            <li 
-                              key={index}
+                              <li 
+                                key={index}
                                 className={`px-4 py-3 hover:bg-indigo-50/80 cursor-pointer border-b border-gray-100/60 last:border-b-0 transition-all duration-200 ${
                                   isSelected ? 'bg-indigo-50/80' : ''
                                 }`}
@@ -1296,7 +1306,7 @@ export default function Home() {
                                     {suggestion.count} {suggestion.count === 1 ? 'grupo' : 'grupos'}
                                   </div>
                                 </div>
-                            </li>
+                              </li>
                             );
                           })}
                         </ul>
@@ -1311,11 +1321,58 @@ export default function Home() {
 
                 {/* Modern Quick Filter Pills */}
                 <div className="flex flex-wrap justify-center mt-6 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchTerm('');
+                      // Don't clear search results - show all active groups instead
+                      const activeGroups = allGroups.filter(group => group.active !== false);
+                      setSearchResults(activeGroups);
+                      setSearchType(null);
+                      setHasSearched(true);
+                      // Reset search but keep all groups visible on map
+                      setFilteredGroups(activeGroups);
+                      // Force map to update and fit all markers
+                      setMapKey(prevKey => prevKey + 1);
+                      
+                      // Multiple attempts to fit bounds with increasing delays to ensure markers are loaded
+                      // First attempt - short delay
+                      setTimeout(() => {
+                        if (mapRef.current) {
+                          console.log("First attempt to fit bounds to all markers");
+                          mapRef.current.fitBoundsToMarkers();
+                        }
+                      }, 200);
+                      
+                      // Second attempt - medium delay
+                      setTimeout(() => {
+                        if (mapRef.current) {
+                          console.log("Second attempt to fit bounds to all markers");
+                          mapRef.current.fitBoundsToMarkers();
+                        }
+                      }, 500);
+                      
+                      // Third attempt - longer delay for reliability
+                      setTimeout(() => {
+                        if (mapRef.current) {
+                          console.log("Final attempt to fit bounds to all markers");
+                          mapRef.current.fitBoundsToMarkers();
+                        }
+                      }, 1000);
+                    }}
+                    className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-full text-sm font-medium shadow-md hover:from-indigo-700 hover:to-indigo-800 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 border border-indigo-700 flex items-center"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Mostrar todos os Pockets
+                  </button>
+                  
                   {['Brasil', 'São Paulo', 'Rio de Janeiro', 'USP'].map((suggestion) => (
                     <button
                       key={suggestion}
                       type="button"
-                      onClick={(e) => {
+                      onClick={(e: React.MouseEvent) => {
                         setSearchTerm(suggestion);
                         performSearch(suggestion, e as unknown as React.FormEvent, true);
                       }}
@@ -1411,7 +1468,11 @@ export default function Home() {
                 </div>
                 {searchResults.length > 0 && (
                   <div className="text-xs font-medium text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-                    Mostrando todos os resultados
+                    {(() => {
+                      const startItem = (currentPage - 1) * itemsPerPage + 1;
+                      const endItem = Math.min(currentPage * itemsPerPage, searchResults.length);
+                      return `Mostrando ${startItem}-${endItem} de ${searchResults.length} grupos`;
+                    })()}
                   </div>
                 )}
               </div>
@@ -1466,47 +1527,6 @@ export default function Home() {
               </div>
             </div>
           </>
-        )}
-
-        {!hasSearched && !isLoadingInitial && (
-          <div className="max-w-3xl mx-auto text-center py-16 px-4">
-            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg p-10 border border-gray-100">
-              <div className="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-6">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              </div>
-              <h2 className="text-2xl font-semibold mb-4 text-gray-900">Encontre um Pocket Dunamis</h2>
-              <p className="text-gray-600 mb-8 max-w-xl mx-auto">
-                Use a barra de pesquisa acima para localizar grupos universitários Dunamis próximos a você. Pesquise por universidade, cidade, estado ou país.
-              </p>
-              <div className="flex flex-wrap justify-center gap-2">
-                {['Brasil', 'São Paulo', 'Rio de Janeiro', 'USP'].map((suggestion) => (
-                  <button
-                    key={suggestion}
-                    type="button"
-                    onClick={(e) => {
-                      setSearchTerm(suggestion);
-                      performSearch(suggestion, e as unknown as React.FormEvent, true);
-                    }}
-                    className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-full text-sm hover:bg-indigo-100 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-indigo-300 border border-indigo-100"
-                  >
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {isLoadingInitial && (
-          <div className="flex justify-center items-center py-20">
-            <div className="flex flex-col items-center">
-              <div className="animate-spin rounded-full h-14 w-14 border-2 border-indigo-500/30 border-t-indigo-600 mb-4"></div>
-              <span className="text-gray-500 font-medium text-sm">Carregando grupos...</span>
-            </div>
-          </div>
         )}
       </div>
 

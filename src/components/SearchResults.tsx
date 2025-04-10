@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Group } from '@/lib/interfaces';
 
 interface SearchResultsProps {
@@ -12,6 +12,15 @@ const SearchResults: React.FC<SearchResultsProps> = ({
   handleResultClick,
   selectedGroupId,
 }) => {
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [groupsPerPage] = useState(5);
+  
+  // Reset to first page when search results change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchResults.length]);
+
   // Group results by location (city, state)
   const locationGroups: Record<string, Group[]> = {};
   const locationOrder: string[] = [];
@@ -27,6 +36,33 @@ const SearchResults: React.FC<SearchResultsProps> = ({
     locationGroups[locationKey].push(group);
   });
 
+  // Pagination logic
+  const totalLocations = locationOrder.length;
+  const totalPages = Math.ceil(totalLocations / groupsPerPage);
+  
+  // Get current locations for the page
+  const indexOfLastLocation = currentPage * groupsPerPage;
+  const indexOfFirstLocation = indexOfLastLocation - groupsPerPage;
+  const currentLocations = locationOrder.slice(indexOfFirstLocation, indexOfLastLocation);
+  
+  // Calculate total groups in current page for accurate display
+  const totalGroupsInCurrentPage = currentLocations.reduce((total, location) => 
+    total + locationGroups[location].length, 0
+  );
+  
+  // Calculate starting group number across all pages
+  const startGroupIndex = locationOrder.slice(0, indexOfFirstLocation).reduce((total, location) => 
+    total + locationGroups[location].length, 0
+  ) + 1;
+  
+  // Calculate ending group number
+  const endGroupIndex = startGroupIndex + totalGroupsInCurrentPage - 1;
+
+  // Page navigation
+  const goToPage = (pageNumber: number) => {
+    setCurrentPage(Math.min(Math.max(1, pageNumber), totalPages));
+  };
+
   if (searchResults.length === 0) {
     return null;
   }
@@ -34,37 +70,20 @@ const SearchResults: React.FC<SearchResultsProps> = ({
   return (
     <div className="w-full">
       <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200">
-        <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-5 border-b border-blue-200 flex justify-between items-center relative overflow-hidden">
-          {/* Decorative elements */}
-          <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -mt-20 -mr-20"></div>
-          <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full -mb-12 -ml-12"></div>
-          
-          <div className="relative z-10">
-            <h3 className="text-xl font-semibold text-white flex items-center">
-              <span className="bg-white/20 h-8 w-8 inline-flex items-center justify-center rounded-lg mr-2 backdrop-blur-sm">
-                <span className="font-bold">{searchResults.length}</span>
-              </span>
-              <span>
-                resultado{searchResults.length !== 1 ? 's' : ''} encontrado{searchResults.length !== 1 ? 's' : ''}
-              </span>
-            </h3>
-            <p className="text-sm text-blue-50 mt-1 pl-1">
-              Clique em um grupo para ver sua localização no mapa
-            </p>
+        {/* Results count header - Redesigned to match screenshot */}
+        <div className="bg-white px-4 py-3 border-b border-gray-100">
+          <div className="flex items-center">
+            <div className="text-gray-800 font-medium">
+              {searchResults.length} {searchResults.length === 1 ? 'grupo' : 'grupos'} encontrados
+            </div>
           </div>
-          <button 
-            className="relative z-10 h-9 w-9 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 focus:outline-none focus:ring-2 focus:ring-white/50 transition-all duration-200"
-            aria-label="Fechar resultados"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <div className="mt-2 text-xs text-gray-500">
+            Clique em um grupo para ver no mapa
+          </div>
         </div>
 
         <div className="p-5">
-          {locationOrder.map((location) => (
+          {currentLocations.map((location) => (
             <div 
               key={location} 
               className="mb-6 last:mb-0 pb-6 last:pb-0 border-b last:border-b-0 border-gray-100"
@@ -224,6 +243,70 @@ const SearchResults: React.FC<SearchResultsProps> = ({
             </div>
           ))}
         </div>
+        
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="border-t border-gray-100 px-5 py-4">
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-gray-500">
+                Mostrando {startGroupIndex}-{endGroupIndex} de {searchResults.length} grupos
+              </div>
+              
+              <div className="flex space-x-1">
+                <button
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className={`p-2 rounded-lg ${
+                    currentPage === 1 
+                      ? 'text-gray-300 cursor-not-allowed' 
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                  aria-label="Página anterior"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                
+                {/* Page numbers */}
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  // Show current page and nearby pages
+                  const pageOffset = Math.min(Math.max(0, currentPage - 3), totalPages - 5);
+                  const pageNum = i + 1 + pageOffset;
+                  
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => goToPage(pageNum)}
+                      className={`w-8 h-8 flex items-center justify-center rounded-lg text-sm ${
+                        currentPage === pageNum
+                          ? 'bg-indigo-50 text-indigo-700 font-medium'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+                
+                <button
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className={`p-2 rounded-lg ${
+                    currentPage === totalPages 
+                      ? 'text-gray-300 cursor-not-allowed' 
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                  aria-label="Próxima página"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

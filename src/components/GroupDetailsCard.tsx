@@ -1,12 +1,41 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Group, MeetingTime, Leader } from '@/lib/interfaces';
 
 interface GroupDetailsCardProps {
   group: Group;
   onClose?: () => void;
+  isInsideInfoWindow?: boolean;
 }
 
-const GroupDetailsCard: React.FC<GroupDetailsCardProps> = ({ group, onClose }) => {
+const GroupDetailsCard: React.FC<GroupDetailsCardProps> = ({ 
+  group, 
+  onClose,
+  isInsideInfoWindow = false 
+}) => {
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // Handle Google Maps InfoWindow close buttons
+  useEffect(() => {
+    // Only run this if card is rendered in an info window
+    if (isInsideInfoWindow) {
+      // Try to find and hide any Google Maps close buttons that might appear
+      const hideGoogleCloseBtn = setInterval(() => {
+        const closeButtons = document.querySelectorAll('.gm-ui-hover-effect');
+        if (closeButtons.length > 0) {
+          closeButtons.forEach(btn => {
+            const element = btn as HTMLElement;
+            element.style.display = 'none';
+            element.style.visibility = 'hidden';
+            element.style.opacity = '0';
+          });
+          clearInterval(hideGoogleCloseBtn);
+        }
+      }, 50);
+      
+      return () => clearInterval(hideGoogleCloseBtn);
+    }
+  }, [isInsideInfoWindow]);
+
   // Format meeting times for readable display
   const formatMeetingTimes = (meetingTimes: MeetingTime[]): string => {
     if (!meetingTimes || meetingTimes.length === 0) return "Horários não informados";
@@ -34,26 +63,26 @@ const GroupDetailsCard: React.FC<GroupDetailsCardProps> = ({ group, onClose }) =
   };
 
   return (
-    <div className="relative bg-white rounded-xl shadow-lg overflow-hidden w-full max-w-md transition-all duration-300 ease-in-out transform hover:shadow-xl">
-      {/* Improved Close Button - Positioned in the top-right corner */}
+    <div 
+      ref={cardRef}
+      className="relative bg-white rounded-xl shadow-lg overflow-hidden w-full max-w-md transition-all duration-300 ease-in-out transform hover:shadow-xl"
+    >
+      {/* Only show our custom close button if onClose callback is provided */}
       {onClose && (
         <button 
           onClick={onClose}
-          className="absolute top-3 right-3 z-10 flex items-center justify-center w-8 h-8 rounded-full bg-white/80 backdrop-blur-sm text-gray-600 transition-all duration-200 hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 shadow-sm"
+          className="absolute top-3 right-3 z-20 flex items-center justify-center w-7 h-7 rounded-full bg-white/70 backdrop-blur-sm text-gray-500 transition-all duration-200 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-300 border border-gray-200/50 shadow-sm"
           aria-label="Fechar detalhes"
         >
           <svg 
             xmlns="http://www.w3.org/2000/svg" 
-            className="h-5 w-5" 
-            viewBox="0 0 20 20" 
-            fill="currentColor" 
-            aria-hidden="true"
+            className="h-4 w-4" 
+            fill="none"
+            viewBox="0 0 24 24" 
+            stroke="currentColor" 
+            strokeWidth={2}
           >
-            <path 
-              fillRule="evenodd" 
-              d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" 
-              clipRule="evenodd" 
-            />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
       )}

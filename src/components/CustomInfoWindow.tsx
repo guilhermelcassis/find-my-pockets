@@ -120,6 +120,16 @@ const CustomInfoWindow: React.FC<CustomInfoWindowProps> = ({
               const closeButton = document.querySelector('.gm-ui-hover-effect') as HTMLElement;
               if (closeButton) {
                 closeButton.style.display = 'none';
+                // Force hide the button to avoid any flickering
+                closeButton.style.visibility = 'hidden';
+                closeButton.style.opacity = '0';
+                closeButton.style.pointerEvents = 'none';
+                
+                // Also hide the parent container to ensure it doesn't take up space
+                const closeButtonContainer = closeButton.parentElement;
+                if (closeButtonContainer) {
+                  closeButtonContainer.style.display = 'none';
+                }
               }
             }
             
@@ -166,7 +176,7 @@ const CustomInfoWindow: React.FC<CustomInfoWindowProps> = ({
 
   // Render our React component into the InfoWindow using Portal
   return containerElement 
-    ? createPortal(<GroupDetailsCard group={group} onClose={onClose} />, containerElement) 
+    ? createPortal(<GroupDetailsCard group={group} onClose={onClose} isInsideInfoWindow={true} />, containerElement) 
     : null;
 };
 
