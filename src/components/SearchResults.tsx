@@ -14,18 +14,27 @@ const SearchResults: React.FC<SearchResultsProps> = ({
 }) => {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const [groupsPerPage] = useState(5);
+  const ITEMS_PER_PAGE = 10; // Constant for items per page
   
   // Reset to first page when search results change
   useEffect(() => {
     setCurrentPage(1);
   }, [searchResults.length]);
 
-  // Group results by location (city, state)
+  // Calculate pagination
+  const totalGroups = searchResults.length;
+  const totalPages = Math.ceil(totalGroups / ITEMS_PER_PAGE);
+  
+  // Get groups for current page
+  const indexOfLastGroup = currentPage * ITEMS_PER_PAGE;
+  const indexOfFirstGroup = indexOfLastGroup - ITEMS_PER_PAGE;
+  const currentGroups = searchResults.slice(indexOfFirstGroup, indexOfLastGroup);
+  
+  // Group current page results by location (city, state)
   const locationGroups: Record<string, Group[]> = {};
   const locationOrder: string[] = [];
 
-  searchResults.forEach((group) => {
+  currentGroups.forEach((group) => {
     const locationKey = `${group.city}, ${group.state}`;
     
     if (!locationGroups[locationKey]) {
@@ -35,29 +44,7 @@ const SearchResults: React.FC<SearchResultsProps> = ({
     
     locationGroups[locationKey].push(group);
   });
-
-  // Pagination logic
-  const totalLocations = locationOrder.length;
-  const totalPages = Math.ceil(totalLocations / groupsPerPage);
   
-  // Get current locations for the page
-  const indexOfLastLocation = currentPage * groupsPerPage;
-  const indexOfFirstLocation = indexOfLastLocation - groupsPerPage;
-  const currentLocations = locationOrder.slice(indexOfFirstLocation, indexOfLastLocation);
-  
-  // Calculate total groups in current page for accurate display
-  const totalGroupsInCurrentPage = currentLocations.reduce((total, location) => 
-    total + locationGroups[location].length, 0
-  );
-  
-  // Calculate starting group number across all pages
-  const startGroupIndex = locationOrder.slice(0, indexOfFirstLocation).reduce((total, location) => 
-    total + locationGroups[location].length, 0
-  ) + 1;
-  
-  // Calculate ending group number
-  const endGroupIndex = startGroupIndex + totalGroupsInCurrentPage - 1;
-
   // Page navigation
   const goToPage = (pageNumber: number) => {
     setCurrentPage(Math.min(Math.max(1, pageNumber), totalPages));
@@ -83,7 +70,7 @@ const SearchResults: React.FC<SearchResultsProps> = ({
         </div>
 
         <div className="p-5">
-          {currentLocations.map((location) => (
+          {locationOrder.map((location) => (
             <div 
               key={location} 
               className="mb-6 last:mb-0 pb-6 last:pb-0 border-b last:border-b-0 border-gray-100"
@@ -249,7 +236,7 @@ const SearchResults: React.FC<SearchResultsProps> = ({
           <div className="border-t border-gray-100 px-5 py-4">
             <div className="flex items-center justify-between">
               <div className="text-xs text-gray-500">
-                Mostrando {startGroupIndex}-{endGroupIndex} de {searchResults.length} grupos
+                Mostrando {indexOfFirstGroup + 1}-{Math.min(indexOfLastGroup, totalGroups)} de {totalGroups} grupos
               </div>
               
               <div className="flex space-x-1">
@@ -269,25 +256,63 @@ const SearchResults: React.FC<SearchResultsProps> = ({
                 </button>
                 
                 {/* Page numbers */}
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  // Show current page and nearby pages
-                  const pageOffset = Math.min(Math.max(0, currentPage - 3), totalPages - 5);
-                  const pageNum = i + 1 + pageOffset;
+                {Array.from({ length: totalPages }, (_, i) => {
+                  const pageNum = i + 1;
                   
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() => goToPage(pageNum)}
-                      className={`w-8 h-8 flex items-center justify-center rounded-lg text-sm ${
-                        currentPage === pageNum
-                          ? 'bg-indigo-50 text-indigo-700 font-medium'
-                          : 'text-gray-600 hover:bg-gray-100'
-                      }`}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                })}
+                  // Only display maximum 5 pages at a time
+                  if (totalPages <= 5) {
+                    // If 5 or fewer pages, show all
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => goToPage(pageNum)}
+                        className={`w-8 h-8 flex items-center justify-center rounded-lg text-sm ${
+                          currentPage === pageNum
+                            ? 'bg-indigo-50 text-indigo-700 font-medium'
+                            : 'text-gray-600 hover:bg-gray-100'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  } else {
+                    // For more than 5 pages, show first, last, current, and pages around current
+                    const showFirst = pageNum === 1;
+                    const showLast = pageNum === totalPages;
+                    const showCurrent = Math.abs(pageNum - currentPage) <= 1;
+                    
+                    if (showFirst || showLast || showCurrent) {
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => goToPage(pageNum)}
+                          className={`w-8 h-8 flex items-center justify-center rounded-lg text-sm ${
+                            currentPage === pageNum
+                              ? 'bg-indigo-50 text-indigo-700 font-medium'
+                              : 'text-gray-600 hover:bg-gray-100'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    } else if (
+                      (pageNum === 2 && currentPage > 3) || 
+                      (pageNum === totalPages - 1 && currentPage < totalPages - 2)
+                    ) {
+                      // Show ellipsis for skipped pages
+                      return (
+                        <span 
+                          key={`ellipsis-${pageNum}`}
+                          className="w-8 h-8 flex items-center justify-center text-gray-400"
+                        >
+                          ...
+                        </span>
+                      );
+                    }
+                    
+                    return null;
+                  }
+                }).filter(Boolean)}
                 
                 <button
                   onClick={() => goToPage(currentPage + 1)}

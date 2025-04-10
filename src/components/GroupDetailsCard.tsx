@@ -90,7 +90,12 @@ const GroupDetailsCard: React.FC<GroupDetailsCardProps> = ({
       <div className="p-5">
         {/* Header with university and location */}
         <header className="mb-4">
-          <h3 className="text-lg font-bold text-gray-900 mb-1 pr-8">{group.university}</h3>
+          <h3 
+            className="text-base md:text-lg font-bold text-gray-900 mb-1 pr-8 line-clamp-2 overflow-hidden text-ellipsis" 
+            title={group.university}
+          >
+            {group.university}
+          </h3>
           <p className="text-sm text-gray-600">{group.city}, {group.state}</p>
         </header>
         
