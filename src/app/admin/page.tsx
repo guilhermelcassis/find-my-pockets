@@ -707,6 +707,9 @@ const AdminPage = () => {
             setSelectedLeaderId('');
             setLocationSelected(false);
             
+            // Reset to step 1 to allow inserting a new group
+            setCurrentStep(1);
+            
             // Reset marker to default position if map exists
             if (map && marker) {
                 const defaultLocation = { lat: -24.65236500245874, lng: -47.87912740708651 };
