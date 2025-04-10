@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import { normalizeText } from '../lib/utils';
 import dynamic from 'next/dynamic';
 import { MapRef } from '@/components/Map';
+import SearchResults from '@/components/SearchResults';
 
 // Create a new type for the Map component to include the onMarkerClick prop
 type EnhancedMapProps = {
@@ -33,7 +34,7 @@ const MapComponent = dynamic(() =>
 // Add a TypeScript interface for suggestion items
 interface SuggestionItem {
   text: string;
-  type: 'university' | 'city' | 'state';
+  type: 'university' | 'city' | 'state' | 'country';
   displayText: string;
   count: number;
 }
@@ -57,11 +58,11 @@ export default function Home() {
   const selectedResultRef = useRef<HTMLDivElement>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const prevSearchResults = useRef<Group[]>([]);
-  const [searchType, setSearchType] = useState<'university' | 'city' | 'state' | null>(null);
+  const [searchType, setSearchType] = useState<'university' | 'city' | 'state' | 'country' | null>(null);
   const selectedSuggestionRef = useRef<string | null>(null);
   const inSuggestionSelectionProcess = useRef<boolean>(false);
   const lastSearchedTermRef = useRef<string>('');
-  const lastSearchedTypeRef = useRef<'university' | 'city' | 'state' | null>(null);
+  const lastSearchedTypeRef = useRef<'university' | 'city' | 'state' | 'country' | null>(null);
   const resultsContainerRef = useRef<HTMLDivElement>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const dropdownLockRef = useRef<boolean>(false);
@@ -258,6 +259,10 @@ export default function Home() {
       return activeGroups.filter(g => normalizeText(g.university) === normalizeText(university)).length;
     };
     
+    const getCountryResultCount = (country: string) => {
+      return activeGroups.filter(g => normalizeText(g.country) === normalizeText(country)).length;
+    };
+    
     activeGroups.forEach(group => {
       // Check if university matches
       if (normalizeText(group.university).includes(normalizedTerm)) {
@@ -291,6 +296,17 @@ export default function Home() {
           count
         });
       }
+      
+      // Check if country matches
+      if (normalizeText(group.country).includes(normalizedTerm)) {
+        const count = getCountryResultCount(group.country);
+        suggestionsMap.set(`country-${group.country}`, {
+          text: group.country,
+          type: 'country',
+          displayText: group.country,
+          count
+        });
+      }
     });
     
     // Convert to array and sort primarily by count (number of results) instead of type
@@ -303,8 +319,8 @@ export default function Home() {
         return b.count - a.count;
       }
       
-      // If counts are equal, sort by type (university, city, state)
-      const typeOrder: Record<string, number> = { university: 1, city: 2, state: 3 };
+      // If counts are equal, sort by type (university, city, state, country)
+      const typeOrder: Record<string, number> = { university: 1, city: 2, state: 3, country: 4 };
       const typeComparisonA = typeOrder[a.type] || 0;
       const typeComparisonB = typeOrder[b.type] || 0;
       
@@ -507,22 +523,33 @@ export default function Home() {
       return;
     }
     
-    // When clicking on a list result, we DO want to zoom to that location on the map
+    // IMPROVED: When clicking on a list result, implement a more reliable zooming sequence
+    // First, simply highlight the marker without changing zoom
+    if (mapRef.current) {
+      console.log('First highlighting marker for:', group.university);
+      mapRef.current.showGroupDetails(groupId);
+    }
+    
+    // Then zoom to the location with a slight delay to prevent visual jumps
     setTimeout(() => {
       if (mapRef.current) {
-        console.log('Zooming to clicked result:', group.university);
-        
-        // First zoom to this specific group - changes map center and zoom level
+        console.log('Now zooming to clicked result:', group.university);
         mapRef.current.zoomToGroup(groupId);
         
-        // Then show details for this specific group
+        // Finally, ensure the popup is visible after zooming completes
         setTimeout(() => {
           if (mapRef.current) {
+            console.log('Ensuring popup is visible for:', group.university);
             mapRef.current.showGroupDetails(groupId);
           }
-        }, 300); // Small delay to allow the map to finish zooming
+        }, 500); // Delay to allow zoom animation to complete
       }
     }, 100);
+    
+    // For mobile view, switch to map view when a result is clicked
+    if (window.innerWidth < 1024) { // lg breakpoint in Tailwind
+      setMobileView('map');
+    }
   }, [searchResults, allGroups]);
 
   // Function to safely set search term without causing map flickering
@@ -663,20 +690,32 @@ export default function Home() {
       // Pass the suggestion type directly to avoid timing issues with React state
       performSearch(actualSearchTerm, syntheticEvent, true, suggestion.type);
       
-      // After search results are loaded, ensure map is zoomed to show all markers
-      // This helps when selecting a city or state to see all results at once
+      // IMPROVED MAP ADJUSTMENT: Create a staggered sequence of map adjustments
+      // This ensures more reliable map zooming after selecting a suggestion
+      
+      // First adjustment: Initial fit to markers (quick)
       setTimeout(() => {
         if (mapRef.current) {
-          console.log("Fitting map bounds to show all selection results");
+          console.log("Initial map bounds adjustment");
           mapRef.current.fitBoundsToMarkers();
-        } else {
-          console.log("Map reference not available, cannot fit bounds");
         }
-      }, 800); // Give additional time for markers to be created and search to complete
+      }, 300); // Short delay for initial adjustment
       
-      // Do not release the lock here - this was causing the dropdown to reopen
-      // We want to keep the lock active until the user explicitly clicks again
-      // or starts typing in the search box
+      // Second adjustment: More thorough fit once all markers are definitely loaded
+      setTimeout(() => {
+        if (mapRef.current) {
+          console.log("Final map bounds adjustment");
+          mapRef.current.fitBoundsToMarkers();
+          
+          // If we have a single result, zoom in a bit more for better visibility
+          const effectiveResults = searchResults.length > 0 ? searchResults : 
+            filterGroupsByNormalizedText(allGroups, actualSearchTerm);
+          
+          if (effectiveResults.length === 1 && effectiveResults[0]) {
+            mapRef.current.zoomToGroup(effectiveResults[0].id);
+          }
+        }
+      }, 1000); // Longer delay to ensure all markers are rendered
     }, 50);
   };
 
@@ -685,7 +724,7 @@ export default function Home() {
     term: string, 
     e: React.FormEvent, 
     forceSearch: boolean = false,
-    directType?: 'university' | 'city' | 'state' | null
+    directType?: 'university' | 'city' | 'state' | 'country' | null
   ) => {
     e.preventDefault();
     
@@ -771,10 +810,13 @@ export default function Home() {
           } else if (effectiveType === 'university') {
             return normalizeText(group.university) === normalizeText(term) || 
                    normalizeText(group.university).includes(normalizeText(term));
+          } else if (effectiveType === 'country') {
+            return normalizeText(group.country) === normalizeText(term) || 
+                   normalizeText(group.country).includes(normalizeText(term));
           }
           return false;
         });
-        } else {
+      } else {
         // No type specified, use the regular filter function
         filteredResults = filterGroupsByNormalizedText(allGroups, term);
       }
@@ -788,17 +830,41 @@ export default function Home() {
       // Force map re-render with new data - done after all search processing is complete
       setMapKey(prevKey => prevKey + 1);
       
-      // After search is complete (regardless of source), fit the map to the markers
+      // IMPROVED MAP ADJUSTMENT STRATEGY
+      // Use a sequence of map adjustments with different timings to ensure reliability
+      
+      // First adjustment attempt (quick)
       setTimeout(() => {
         if (mapRef.current && sortedResults.length > 0) {
-          console.log("Fitting map bounds to search results, markers:", sortedResults.length);
+          console.log("Quick map bounds adjustment, markers:", sortedResults.length);
           mapRef.current.fitBoundsToMarkers();
-        } else if (!mapRef.current) {
-          console.log("Map reference not available, cannot fit bounds");
-        } else if (sortedResults.length === 0) {
-          console.log("No search results to fit bounds to");
         }
-      }, 500); // Give time for the markers to be created
+      }, 300);
+      
+      // Second adjustment attempt (medium delay)
+      setTimeout(() => {
+        if (mapRef.current && sortedResults.length > 0) {
+          console.log("Medium delay map bounds adjustment");
+          mapRef.current.fitBoundsToMarkers();
+        }
+      }, 600);
+      
+      // Final adjustment attempt (longer delay to ensure all markers are created)
+      setTimeout(() => {
+        if (mapRef.current && sortedResults.length > 0) {
+          console.log("Final map bounds adjustment");
+          mapRef.current.fitBoundsToMarkers();
+          
+          // Special case for single result - zoom in more for better visibility
+          if (sortedResults.length === 1 && sortedResults[0]) {
+            setTimeout(() => {
+              if (mapRef.current) {
+                mapRef.current.zoomToGroup(sortedResults[0].id);
+              }
+            }, 200);
+          }
+        }
+      }, 1200);
       
       // Only try server-side search if client-side filtering didn't find enough results
       if (filteredResults.length === 0 && allGroups.length > 0) {
@@ -811,10 +877,13 @@ export default function Home() {
               return `state.ilike.${searchPattern}`;
             } else if (effectiveType === 'university') {
               return `university.ilike.${searchPattern}`;
-        } else {
+            } else if (effectiveType === 'country') {
+              return `country.ilike.${searchPattern}`;
+            } else {
               return `university.ilike.${searchPattern},` +
                      `city.ilike.${searchPattern},` +
-                     `state.ilike.${searchPattern}`;
+                     `state.ilike.${searchPattern},` +
+                     `country.ilike.${searchPattern}`;
             }
           };
           
@@ -826,9 +895,18 @@ export default function Home() {
             
           if (!error && data.length > 0) {
             console.log(`Found ${data.length} results with server-side query`);
-            setSearchResults(sortResultsByQuantity(data as Group[]));
+            const serverResults = sortResultsByQuantity(data as Group[]);
+            setSearchResults(serverResults);
             // Update map again
             setMapKey(prevKey => prevKey + 1);
+            
+            // Adjust map for server-side results
+            setTimeout(() => {
+              if (mapRef.current && serverResults.length > 0) {
+                console.log("Adjusting map bounds for server results");
+                mapRef.current.fitBoundsToMarkers();
+              }
+            }, 800);
           }
         } catch (serverError) {
           console.error("Server-side search failed:", serverError);
@@ -962,550 +1040,503 @@ export default function Home() {
   }, []);
 
   return (
-    <main className="min-h-screen p-4 flex flex-col">
-      {/* Page title */}
-      <h1 className="text-3xl font-bold text-center mb-6">
-        Encontre Pockets Dunamis nas Universidades
-      </h1>
-      
-      {/* Search field centered at the top */}
-      <div className="max-w-3xl mx-auto mb-6 w-full">
-        <form onSubmit={(e) => handleSearch(e)}>
-          <div className="relative">
-            <div className="flex">
-              <div className="relative flex-grow flex items-center">
-                {searchType && !isTyping && (
-                  <div className="absolute left-3 flex items-center">
-                    <div className={`h-6 w-6 rounded-full flex items-center justify-center mr-2 ${
-                      searchType === 'university' ? 'bg-blue-100' :
-                      searchType === 'city' ? 'bg-green-100' :
-                      'bg-purple-100'
-                    }`}>
-                      {searchType === 'university' && (
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path d="M12 14l9-5-9-5-9 5 9 5z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14zm-4 6v-7.5l4-2.222" />
-                        </svg>
-                      )}
-                      {searchType === 'city' && (
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                        </svg>
-                      )}
-                      {searchType === 'state' && (
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-                        </svg>
-                      )}
-                    </div>
-                    <span className="text-xs font-medium text-gray-500 hidden sm:inline">
-                      {searchType === 'university' ? 'Universidade' : 
-                       searchType === 'city' ? 'Cidade' : 'Estado'}
-                    </span>
-                  </div>
-                )}
-              <input
-                ref={searchInputRef}
-                type="text"
-                value={searchTerm}
-                  onChange={(e) => {
-                    updateSearchTerm(e.target.value);
-                    // Clear search type when user starts typing
-                    if (e.target.value.trim() !== searchTerm) {
-                      setSearchType(null);
-                    }
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation(); // Prevent event bubbling
-                    // Only show suggestions if not locked
-                    if (searchTerm.trim().length >= 2 && !dropdownLockRef.current) {
-                      setShowSuggestions(true); // Show suggestions on click if we have a search term
-                    }
-                  }}
-                  onFocus={() => {
-                    console.log("Search input focused - setting typing flag");
-                    isUserTypingRef.current = true;
-                    window.isUserTyping = true;
-                    
-                    // Add the timeout to reset the flag after a delay
-                    setTimeout(() => {
-                      if (document.activeElement !== searchInputRef.current) {
-                        isUserTypingRef.current = false;
-                        window.isUserTyping = false;
-                      }
-                    }, 500);
-                    
-                    // Don't show suggestions on focus if dropdown is locked
-                    // This prevents the dropdown from opening again after a selection
-                    if (searchTerm.trim().length >= 2 && suggestionItems.length > 0 && !dropdownLockRef.current) {
-                      setShowSuggestions(true);
-                    }
-                  }}
-                placeholder="Pesquisar por universidade, cidade, estado ou país"
-                  className={`flex-grow p-3 border rounded-l focus:outline-none focus:ring-2 focus:ring-blue-500 ${searchType && !isTyping ? 'pl-24 sm:pl-32' : ''}`}
-                autoComplete="off"
-              />
-                {searchTerm && (
-                  <button 
-                    type="button" 
-                    className="absolute right-3 text-gray-400 hover:text-gray-600"
-                    onClick={() => {
-                      setSearchTerm('');
-                      setSearchType(null);
-                      if (searchInputRef.current) {
-                        searchInputRef.current.value = '';
-                        searchInputRef.current.focus();
+    <main className="min-h-screen p-4 md:p-6 flex flex-col">
+      <div className="max-w-7xl mx-auto w-full">
+        {/* Page header */}
+        <div className="mb-6">
+          <h1 className="text-2xl md:text-3xl font-bold text-center mb-6">
+            Encontre Pockets Dunamis nas Universidades
+          </h1>
+          
+          {/* Search container with elevated card style */}
+          <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-200 mb-6">
+            <form onSubmit={(e) => handleSearch(e)}>
+              <div className="relative">
+                <div className="flex">
+                  <div className="relative flex-grow flex items-center">
+                    {searchType && !isTyping && (
+                      <div className="absolute left-3 flex items-center">
+                        <div className={`h-6 w-6 rounded-full flex items-center justify-center mr-2 ${
+                          searchType === 'university' ? 'bg-blue-100' :
+                          searchType === 'city' ? 'bg-green-100' :
+                          searchType === 'country' ? 'bg-amber-100' :
+                          'bg-purple-100'
+                        }`}>
+                          {searchType === 'university' && (
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path d="M12 14l9-5-9-5-9 5 9 5z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998a12.078 12.078 0 01.665-6.479L12 14zm-4 6v-7.5l4-2.222" />
+                            </svg>
+                          )}
+                          {searchType === 'city' && (
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                            </svg>
+                          )}
+                          {searchType === 'state' && (
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                            </svg>
+                          )}
+                          {searchType === 'country' && (
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          )}
+                        </div>
+                        <span className="text-xs font-medium text-gray-500 hidden sm:inline">
+                          {searchType === 'university' ? 'Universidade' : 
+                           searchType === 'city' ? 'Cidade' : 
+                           searchType === 'country' ? 'País' :
+                           'Estado'}
+                        </span>
+                      </div>
+                    )}
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => {
+                      updateSearchTerm(e.target.value);
+                      // Clear search type when user starts typing
+                      if (e.target.value.trim() !== searchTerm) {
+                        setSearchType(null);
                       }
                     }}
+                    onClick={handleSearchInputClick}
+                    onFocus={() => {
+                      console.log("Search input focused - setting typing flag");
+                      isUserTypingRef.current = true;
+                      window.isUserTyping = true;
+                      
+                      // Don't show suggestions on focus if dropdown is locked
+                      if (searchTerm.trim().length >= 2 && suggestionItems.length > 0 && !dropdownLockRef.current) {
+                        setShowSuggestions(true);
+                      }
+                    }}
+                    placeholder="Pesquisar por universidade, cidade, estado ou país"
+                    className={`flex-grow p-3 border rounded-l focus:outline-none focus:ring-2 focus:ring-primary ${searchType && !isTyping ? 'pl-24 sm:pl-32' : ''}`}
+                    autoComplete="off"
+                  />
+                    {searchTerm && (
+                      <button 
+                        type="button" 
+                        className="absolute right-3 text-gray-400 hover:text-gray-600"
+                        onClick={() => {
+                          setSearchTerm('');
+                          setSearchType(null);
+                          if (searchInputRef.current) {
+                            searchInputRef.current.value = '';
+                            searchInputRef.current.focus();
+                          }
+                        }}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    type="submit"
+                    className="bg-primary hover:bg-primary/90 text-white py-3 rounded-r w-[140px] transition-colors"
+                    disabled={isLoading}
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
+                    {isLoading ? (
+                      <span className="flex items-center justify-center">
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Pesquisando
+                      </span>
+                    ) : 'Pesquisar'}
                   </button>
+                </div>
+                
+                {/* Enhanced Suggestions dropdown */}
+                {showSuggestions && (
+                  <div 
+                    ref={suggestionsRef}
+                    className="absolute z-10 w-full bg-white border border-gray-300 rounded-b mt-0.5 shadow-lg max-h-[300px] overflow-y-auto"
+                  >
+                    {/* Suggestions dropdown content kept unchanged */}
+                    {isLoadingSuggestions ? (
+                      <div className="p-2 text-gray-500 text-sm flex justify-center items-center">
+                        <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-primary mr-2"></div>
+                        Carregando sugestões...
+                      </div>
+                    ) : suggestionItems.length > 0 ? (
+                      <ul className="py-1">
+                        {suggestionItems.map((suggestion, index) => {
+                          // Check if this suggestion matches the current search type and term
+                          const isSelected = searchType === suggestion.type && searchTerm === suggestion.text;
+                          
+                          return (
+                          <li 
+                            key={index}
+                              className={`px-3 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0 ${
+                                isSelected ? 'bg-blue-100' : ''
+                              }`}
+                              onClick={(e) => handleSelectSuggestion(suggestion, e)}
+                            >
+                              <div className="flex items-center justify-between">
+                                {/* Main content with icon and text */}
+                                <div className="flex items-center">
+                                  {/* Type badge */}
+                                  {suggestion.type === 'university' && (
+                                    <div className={`w-8 h-8 flex-shrink-0 ${isSelected ? 'bg-blue-200' : 'bg-blue-100'} rounded-full flex items-center justify-center mr-3`}>
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path d="M12 14l9-5-9-5-9 5 9 5z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998a12.078 12.078 0 01.665-6.479L12 14z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998a12.078 12.078 0 01.665-6.479L12 14zm-4 6v-7.5l4-2.222" />
+                                      </svg>
+                                    </div>
+                                  )}
+                                  {suggestion.type === 'city' && (
+                                    <div className={`w-8 h-8 flex-shrink-0 ${isSelected ? 'bg-green-200' : 'bg-green-100'} rounded-full flex items-center justify-center mr-3`}>
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                                      </svg>
+                                    </div>
+                                  )}
+                                  {suggestion.type === 'state' && (
+                                    <div className={`w-8 h-8 flex-shrink-0 ${isSelected ? 'bg-purple-200' : 'bg-purple-100'} rounded-full flex items-center justify-center mr-3`}>
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                                      </svg>
+                                    </div>
+                                  )}
+                                  {suggestion.type === 'country' && (
+                                    <div className={`w-8 h-8 flex-shrink-0 ${isSelected ? 'bg-amber-200' : 'bg-amber-100'} rounded-full flex items-center justify-center mr-3`}>
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                      </svg>
+                                    </div>
+                                  )}
+                                  
+                                  {/* Text content */}
+                                  <div className="flex flex-col">
+                                    <span className={`font-medium ${isSelected ? 'text-blue-800' : 'text-gray-800'}`}>
+                                      {suggestion.displayText}
+                                    </span>
+                                    <span className="text-xs text-gray-500">
+                                      {suggestion.type === 'university' ? 'Universidade' : 
+                                       suggestion.type === 'city' ? 'Cidade' : 
+                                       suggestion.type === 'country' ? 'País' :
+                                       'Estado'}
+                                    </span>
+                                  </div>
+                                </div>
+                                
+                                {/* Results count badge */}
+                                <div className={`${isSelected ? 'bg-blue-200 text-blue-800' : 'bg-gray-100 text-gray-700'} rounded-full px-2 py-1 text-xs font-semibold ml-2 min-w-[50px] text-center`}>
+                                  {suggestion.count} {suggestion.count === 1 ? 'resultado' : 'resultados'}
+                                </div>
+                              </div>
+                          </li>
+                          );
+                        })}
+                      </ul>
+                    ) : (
+                      <div className="p-3 text-gray-500 text-sm text-center">
+                        Nenhuma sugestão encontrada
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
-              <button
-                type="submit"
-                className="bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-r w-[140px] transition-colors"
-                disabled={isLoading}
-              >
-                {isLoading ? 'Pesquisando...' : 'Pesquisar'}
-              </button>
-            </div>
+            </form>
             
-            {/* Enhanced Suggestions dropdown */}
-            {showSuggestions && (
-              <div 
-                ref={suggestionsRef}
-                className="absolute z-10 w-full bg-white border border-gray-300 rounded-b mt-0.5 shadow-lg max-h-[300px] overflow-y-auto"
-              >
-                {isLoadingSuggestions ? (
-                  <div className="p-2 text-gray-500 text-sm flex justify-center items-center">
-                    <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-blue-500 mr-2"></div>
-                    Carregando sugestões...
-                  </div>
-                ) : suggestionItems.length > 0 ? (
-                  <ul className="py-1">
-                    {suggestionItems.map((suggestion, index) => {
-                      // Check if this suggestion matches the current search type and term
-                      const isSelected = searchType === suggestion.type && searchTerm === suggestion.text;
-                      
-                      return (
-                      <li 
-                        key={index}
-                          className={`px-3 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0 ${
-                            isSelected ? 'bg-blue-100' : ''
-                          }`}
-                          onClick={(e) => {
-                            // Prevent any default behavior 
-                            e.preventDefault();
-                            // Stop propagation to prevent any input click handlers from triggering
-                            e.stopPropagation();
-                            // Close dropdown immediately before any other processing
-                            setShowSuggestions(false);
-                            // Then proceed with normal handling
-                            handleSelectSuggestion(suggestion, e);
-                          }}
-                        >
-                          <div className="flex items-center justify-between">
-                            {/* Main content with icon and text */}
-                            <div className="flex items-center">
-                              {/* Type badge */}
-                              {suggestion.type === 'university' && (
-                                <div className={`w-8 h-8 flex-shrink-0 ${isSelected ? 'bg-blue-200' : 'bg-blue-100'} rounded-full flex items-center justify-center mr-3`}>
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path d="M12 14l9-5-9-5-9 5 9 5z" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998a12.078 12.078 0 01.665-6.479L12 14z" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14zm-4 6v-7.5l4-2.222" />
-                                  </svg>
-                                </div>
-                              )}
-                              {suggestion.type === 'city' && (
-                                <div className={`w-8 h-8 flex-shrink-0 ${isSelected ? 'bg-green-200' : 'bg-green-100'} rounded-full flex items-center justify-center mr-3`}>
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                                  </svg>
-                                </div>
-                              )}
-                              {suggestion.type === 'state' && (
-                                <div className={`w-8 h-8 flex-shrink-0 ${isSelected ? 'bg-purple-200' : 'bg-purple-100'} rounded-full flex items-center justify-center mr-3`}>
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-                                  </svg>
-                                </div>
-                              )}
-                              
-                              {/* Text content */}
-                              <div className="flex flex-col">
-                                <span className={`font-medium ${isSelected ? 'text-blue-800' : 'text-gray-800'}`}>
-                                  {suggestion.displayText}
-                                </span>
-                                <span className="text-xs text-gray-500">
-                                  {suggestion.type === 'university' ? 'Universidade' : 
-                                   suggestion.type === 'city' ? 'Cidade' : 'Estado'}
-                                </span>
-                              </div>
-                            </div>
-                            
-                            {/* Results count badge */}
-                            <div className={`${isSelected ? 'bg-blue-200 text-blue-800' : 'bg-gray-100 text-gray-700'} rounded-full px-2 py-1 text-xs font-semibold ml-2 min-w-[50px] text-center`}>
-                              {suggestion.count} {suggestion.count === 1 ? 'resultado' : 'resultados'}
-                            </div>
-                          </div>
-                      </li>
-                      );
-                    })}
-                  </ul>
-                ) : (
-                  <div className="p-3 text-gray-500 text-sm text-center">
-                    Nenhuma sugestão encontrada
-                  </div>
-                )}
+            {/* Search instructions */}
+            {!hasSearched && (
+              <div className="mt-4 text-center text-gray-600 text-sm px-4">
+                <p>Pesquise por universidade, cidade, estado ou país para encontrar um Pocket Dunamis próximo de você.</p>
+                <p className="mt-1">Exemplo: "USP", "São Paulo", "Minas Gerais" ou "Brasil"</p>
               </div>
             )}
           </div>
-        </form>
-      </div>
-      
-      {/* Mobile View Toggle - only shown on small screens */}
-      <div className="lg:hidden mb-4 flex justify-center">
-        <div className="bg-gray-100 rounded-lg p-1 inline-flex">
-          <button
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-              mobileView === 'map' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500'
-            }`}
-            onClick={() => setMobileView('map')}
-          >
-            <span className="flex items-center gap-1">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-              </svg>
-              Mapa
-            </span>
-          </button>
-          <button
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-              mobileView === 'list' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500'
-            }`}
-            onClick={() => setMobileView('list')}
-          >
-            <span className="flex items-center gap-1">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-              </svg>
-              Lista
-            </span>
-          </button>
-        </div>
-      </div>
-      
-      {/* Main content: Results and Map - modified for mobile */}
-      <div className="flex flex-col lg:flex-row gap-4 h-[calc(100vh-220px)] min-h-[500px] max-h-[800px] mb-4 flex-grow">
-        {/* Results section - hidden on mobile when map is showing */}
-        <div className={`lg:w-[30%] h-full overflow-y-auto bg-white border rounded shadow-sm p-4 ${
-          mobileView === 'list' ? 'block' : 'hidden lg:block'
-        }`} ref={resultsContainerRef}>
-          {/* Display search results */}
-          {searchResults.length > 0 ? (
-            <div>
-              <h2 className="text-xl font-semibold mb-4">Resultados ({searchResults.length})</h2>
-              <div className="text-xs text-gray-500 -mt-3 mb-3">
-                <p>Clique em um resultado para visualizá-lo no mapa</p>
-                <p className="mt-1 italic">Dica: clicar aqui na lista <span className="text-blue-500">zoom</span> no local, mas clicar no mapa <span className="text-blue-500">não altera o zoom</span></p>
-              </div>
-              {/* Group results by location with headers */}
-              {(() => {
-                // Create location groups
-                const locationGroups: Record<string, Group[]> = {};
-                const locationOrder: string[] = [];
-                
-                // Group results by location
-                searchResults.forEach(group => {
-                  const locationKey = `${group.city}|${group.state}`;
-                  const displayKey = `${group.city}, ${group.state}`;
-                  
-                  if (!locationGroups[locationKey]) {
-                    locationGroups[locationKey] = [];
-                    locationOrder.push(locationKey);
-                  }
-                  locationGroups[locationKey].push(group);
-                });
-                
-                // Render grouped results
-                return locationOrder.map(locationKey => {
-                  const groups = locationGroups[locationKey];
-                  const [city, state] = locationKey.split('|');
-                  
-                  return (
-                    <div key={locationKey} className="mb-6">
-                      <div className="flex items-center justify-between bg-gray-100 p-2 rounded-t mb-3">
-                        <h3 className="font-semibold text-gray-700">
-                          {city}, {state}
-                        </h3>
-                        <span className="text-sm bg-blue-500 text-white px-2 py-1 rounded-full">
-                          {groups.length} {groups.length === 1 ? 'grupo' : 'grupos'}
-                        </span>
-                      </div>
-                      
-              <div className="grid grid-cols-1 gap-4">
-                        {groups.map((group) => (
-                  <div 
-                    key={group.id} 
-                            data-group-id={group.id}
-                            className={`mb-4 p-4 rounded-lg shadow cursor-pointer transition-all ${
-                      selectedGroupId === group.id 
-                                ? 'bg-blue-50 border-2 border-blue-500'
-                                : 'bg-white hover:bg-gray-50'
-                    }`}
-                    onClick={() => handleResultClick(group.id)}
-                  >
-                    <div className="flex flex-col">
-                      <div>
-                        <h3 className="font-bold text-base">{group.university}</h3>
-                        <p className="text-gray-600 text-sm">
-                          {group.city}, {group.state}, {group.country}
-                        </p>
-                        
-                        {/* Meeting details */}
-                        <div className="mt-2">
-                          <p className="text-xs">
-                            <span className="font-medium">Encontros:</span> {group.meetingTimes && group.meetingTimes.length > 0 ? 
-                              group.meetingTimes.map(meeting => {
-                                let meetingText = `${meeting.dayofweek} às ${meeting.time}`;
-                                if (meeting.local) {
-                                  meetingText += ` (${meeting.local})`;
-                                }
-                                return meetingText;
-                              }).join(', ') : 
-                              'Informações de horário não disponíveis'
-                            }
-                          </p>
-                        </div>
-                        
-                        {/* Contact Section */}
-                        <div className="mt-3 flex flex-row justify-between items-center">
-                          {/* Leader Information */}
-                          <div>
-                            <p className="text-xs">
-                              <span className="font-medium">Líder:</span> {group.leader?.name}
-                            </p>
-                          </div>
-                          
-                          {/* Action Buttons */}
-                          <div className="flex space-x-1">
-                            {/* WhatsApp Button */}
-                            {group.leader?.phone && (
-                              <a 
-                                href={`https://wa.me/${
-                                  group.leader.phone.startsWith('+') ? 
-                                  group.leader.phone.replace(/[^\d+]/g, '') : 
-                                  group.leader.phone.replace(/\D/g, '')
-                                }`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded text-xs inline-flex items-center"
-                                title="WhatsApp"
-                                onClick={(e) => e.stopPropagation()} // Prevent result click handler from firing
-                              >
-                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
-                                </svg>
-                              </a>
-                            )}
-                            
-                            {/* Instagram Button */}
-                            {group.instagram && (
-                              <a 
-                                href={`https://instagram.com/${group.instagram.replace('@', '')}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="bg-purple-500 hover:bg-purple-600 text-white px-2 py-1 rounded text-xs inline-flex items-center"
-                                title="Instagram"
-                                onClick={(e) => e.stopPropagation()} // Prevent result click handler from firing
-                              >
-                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                  <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/>
-                                </svg>
-                              </a>
-                            )}
-                            
-                            {/* Google Maps Link */}
-                            {group.fulladdress && (
-                              <a 
-                                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(group.fulladdress)}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs inline-flex items-center"
-                                title="Como Chegar"
-                                onClick={(e) => e.stopPropagation()} // Prevent result click handler from firing
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                                </svg>
-                              </a>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-                    </div>
-                  );
-                });
-              })()}
-            </div>
-          ) : (
-            <div className="text-center text-gray-500 h-full flex items-center justify-center">
-              {isLoading ? (
-                <p>Pesquisando...</p>
-              ) : hasSearched && searchTerm ? (
-                <p>Nenhum resultado encontrado. Tente outro termo de pesquisa.</p>
-              ) : (
-                <p>Digite um termo de pesquisa para encontrar um Pocket Dunamis.</p>
-              )}
-            </div>
-          )}
-        </div>
-        
-        {/* Map section - hidden on mobile when list is showing */}
-        <div className={`lg:w-[70%] h-full overflow-hidden ${
-          mobileView === 'map' ? 'block' : 'hidden lg:block'
-        }`}>
-          <div 
-            ref={mapContainerRef}
-            className="bg-white p-4 border rounded shadow-sm h-full flex flex-col"
-          >
-            <div className="mb-3 flex justify-between items-center">
-              <h2 className="text-xl font-semibold">
-                {searchResults.length > 0 
-                  ? `Localizações nas Universidades (${searchResults.length})` 
-                  : `Todas as Localizações (${allGroups.length})`}
-              </h2>
-              
-              {/* Map Controls - Remove filter buttons */}
-              <div className="flex gap-2">
-                <button 
-                  className="bg-white border border-gray-300 rounded px-3 py-1 text-sm flex items-center gap-1 hover:bg-gray-50 transition-colors"
-                  onClick={() => {
-                    if (mapRef.current) {
-                      mapRef.current.fitBoundsToMarkers();
-                    }
-                  }}
+          
+          {/* Mobile View Toggle - only shown on small screens when there are search results */}
+          {hasSearched && (
+            <div className="lg:hidden mb-4 flex justify-center">
+              <div className="bg-gray-100 rounded-lg p-1 inline-flex">
+                <button
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                    mobileView === 'map' ? 'bg-white shadow-sm text-primary' : 'text-gray-500'
+                  }`}
+                  onClick={() => setMobileView('map')}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                  Ver todos
+                  <span className="flex items-center gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                    </svg>
+                    Mapa
+                  </span>
+                </button>
+                <button
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                    mobileView === 'list' ? 'bg-white shadow-sm text-primary' : 'text-gray-500'
+                  }`}
+                  onClick={() => setMobileView('list')}
+                >
+                  <span className="flex items-center gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                    </svg>
+                    Lista
+                  </span>
                 </button>
               </div>
             </div>
-            
-            {/* Remove filter panel section */}
-            
-            <div className="flex-grow relative" style={{ minHeight: "400px" }}>
-              {isLoadingInitial ? (
-                <div className="flex justify-center items-center h-full">
-                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-                </div>
-              ) : (
-                <>
-                  {/* Location button with enhanced tooltip */}
-                  <button 
-                    className="absolute top-4 right-4 z-10 bg-white p-2 rounded-full shadow-md hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 group active:bg-blue-100"
-                    onClick={(e) => {
-                      // Pass the native event directly to maintain the user gesture context
-                      console.log("Location button clicked - requesting exact user location");
-                      // Clear any pending request state
-                      if (mapRef.current) {
-                        mapRef.current.getUserLocation();
-                      }
-                    }}
-                    title="Encontrar minha localização exata atual"
-                    aria-label="Encontrar minha localização exata atual"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    
-                    {/* Enhanced tooltip that appears on hover */}
-                    <div className="hidden group-hover:block absolute top-full right-0 mt-2 w-64 p-3 bg-white rounded-lg shadow-lg text-sm text-gray-700 z-50">
-                      <p className="font-medium mb-1">Mostrar minha localização exata</p>
-                      <p>Seu navegador pedirá permissão para acessar sua localização atual.</p>
-                      <p className="mt-1 text-xs text-gray-500">Se negada, você pode habilitar nas configurações do navegador.</p>
-                    </div>
-                  </button>
-                  
-                  <MapComponent 
-                    key="persistent-map"
-                    ref={mapRef}
-                    groups={getDisplayedGroups()}
+          )}
+          
+          {/* Main content: Results and Map - only shown after search */}
+          {hasSearched && (
+            <div className="flex flex-col lg:flex-row gap-4 h-[calc(100vh-280px)] min-h-[500px] max-h-[800px] mb-4 flex-grow">
+              {/* Rest of the results and map sections kept unchanged */}
+              {/* Results section - hidden on mobile when map is showing */}
+              <div className={`lg:w-[30%] h-full overflow-y-auto bg-white border rounded-lg shadow-sm p-4 ${
+                mobileView === 'list' ? 'block' : 'hidden lg:block'
+              }`} ref={resultsContainerRef}>
+                {/* Display search results */}
+                {searchResults.length > 0 ? (
+                  <SearchResults
+                    searchResults={searchResults}
+                    handleResultClick={handleResultClick}
                     selectedGroupId={selectedGroupId}
-                    height="100%"
-                    onMarkerClick={handleMarkerClick}
-                    enableClustering={false}
                   />
-                </>
-              )}
+                ) : (
+                  <div className="text-center text-gray-500 h-full flex items-center justify-center">
+                    {isLoading ? (
+                      <div className="flex flex-col items-center">
+                        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-primary mb-3"></div>
+                        <p>Pesquisando...</p>
+                      </div>
+                    ) : hasSearched && searchTerm ? (
+                      <div className="flex flex-col items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <p>Nenhum resultado encontrado. Tente outro termo de pesquisa.</p>
+                      </div>
+                    ) : (
+                      <p>Digite um termo de pesquisa para encontrar um Pocket Dunamis.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+              
+              {/* Map section - hidden on mobile when list is showing */}
+              <div className={`lg:w-[70%] h-full overflow-hidden ${
+                mobileView === 'map' ? 'block' : 'hidden lg:block'
+              }`}>
+                <div 
+                  ref={mapContainerRef}
+                  className="bg-white p-4 border rounded-lg shadow-sm h-full flex flex-col"
+                >
+                  <div className="mb-3 flex justify-between items-center">
+                    <h2 className="text-xl font-semibold">
+                      {searchResults.length > 0 
+                        ? `Localizações nas Universidades (${searchResults.length})` 
+                        : `Todas as Localizações (${allGroups.length})`}
+                    </h2>
+                    
+                    {/* Map Controls */}
+                    <div className="flex gap-2">
+                      <button 
+                        className="bg-white border border-gray-300 rounded px-3 py-1 text-sm flex items-center gap-1 hover:bg-gray-50 transition-colors"
+                        onClick={() => {
+                          if (mapRef.current) {
+                            mapRef.current.fitBoundsToMarkers();
+                          }
+                        }}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        Ver todos
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="flex-grow relative" style={{ minHeight: "400px" }}>
+                    {isLoadingInitial ? (
+                      <div className="flex justify-center items-center h-full">
+                        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Location button */}
+                        <button 
+                          className="absolute top-4 right-4 z-10 bg-white p-2 rounded-full shadow-md hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-primary group active:bg-blue-100"
+                          onClick={(e) => {
+                            if (mapRef.current) {
+                              mapRef.current.getUserLocation();
+                            }
+                          }}
+                          title="Encontrar minha localização exata atual"
+                          aria-label="Encontrar minha localização exata atual"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          
+                          {/* Enhanced tooltip */}
+                          <div className="hidden group-hover:block absolute top-full right-0 mt-2 w-64 p-3 bg-white rounded-lg shadow-lg text-sm text-gray-700 z-50">
+                            <p className="font-medium mb-1">Mostrar minha localização exata</p>
+                            <p>Seu navegador pedirá permissão para acessar sua localização atual.</p>
+                            <p className="mt-1 text-xs text-gray-500">Se negada, você pode habilitar nas configurações do navegador.</p>
+                          </div>
+                        </button>
+                        
+                        <MapComponent 
+                          key={mapKey}
+                          ref={mapRef}
+                          groups={getDisplayedGroups()}
+                          selectedGroupId={selectedGroupId}
+                          height="100%"
+                          onMarkerClick={handleMarkerClick}
+                          enableClustering={false}
+                        />
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
+          
+          {/* Show an empty state when no search has been performed */}
+          {!hasSearched && (
+            <div className="bg-white border rounded-lg shadow-sm p-8 text-center flex flex-col items-center justify-center min-h-[400px]">
+              <div className="mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-primary/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                </svg>
+              </div>
+              <h2 className="text-xl font-semibold mb-2">Busque por Pockets Dunamis</h2>
+              <p className="text-gray-600 max-w-md mb-6">
+                Digite uma universidade, cidade, estado ou país no campo de busca acima para
+                encontrar grupos Pocket próximos.
+              </p>
+              <div className="flex flex-wrap justify-center gap-2 max-w-lg">
+                <button 
+                  onClick={() => {
+                    setSearchTerm('Brasil');
+                    setSearchType('country');
+                    if (searchInputRef.current) {
+                      searchInputRef.current.value = 'Brasil';
+                    }
+                    const syntheticEvent = { preventDefault: () => {} } as React.FormEvent;
+                    performSearch('Brasil', syntheticEvent, true, 'country');
+                  }}
+                  className="py-1 px-3 bg-amber-100 text-amber-800 rounded-full text-sm hover:bg-amber-200 transition-colors"
+                >
+                  Brasil
+                </button>
+                <button 
+                  onClick={() => {
+                    setSearchTerm('São Paulo');
+                    setSearchType('state');
+                    if (searchInputRef.current) {
+                      searchInputRef.current.value = 'São Paulo';
+                    }
+                    const syntheticEvent = { preventDefault: () => {} } as React.FormEvent;
+                    performSearch('São Paulo', syntheticEvent, true, 'state');
+                  }}
+                  className="py-1 px-3 bg-purple-100 text-purple-800 rounded-full text-sm hover:bg-purple-200 transition-colors"
+                >
+                  São Paulo
+                </button>
+                <button 
+                  onClick={() => {
+                    setSearchTerm('Rio de Janeiro');
+                    setSearchType('city');
+                    if (searchInputRef.current) {
+                      searchInputRef.current.value = 'Rio de Janeiro';
+                    }
+                    const syntheticEvent = { preventDefault: () => {} } as React.FormEvent;
+                    performSearch('Rio de Janeiro', syntheticEvent, true, 'city');
+                  }}
+                  className="py-1 px-3 bg-green-100 text-green-800 rounded-full text-sm hover:bg-green-200 transition-colors"
+                >
+                  Rio de Janeiro
+                </button>
+                <button 
+                  onClick={() => {
+                    setSearchTerm('USP');
+                    setSearchType('university');
+                    if (searchInputRef.current) {
+                      searchInputRef.current.value = 'USP';
+                    }
+                    const syntheticEvent = { preventDefault: () => {} } as React.FormEvent;
+                    performSearch('USP', syntheticEvent, true, 'university');
+                  }}
+                  className="py-1 px-3 bg-blue-100 text-blue-800 rounded-full text-sm hover:bg-blue-200 transition-colors"
+                >
+                  USP
+                </button>
+              </div>
+            </div>
+          )}
+          
+          {/* Mobile navigation bar at the bottom - only shown after search */}
+          {hasSearched && (
+            <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg p-2 flex justify-around z-20">
+              <button 
+                className={`flex flex-col items-center p-2 rounded ${mobileView === 'map' ? 'text-primary' : 'text-gray-500'}`}
+                onClick={() => setMobileView('map')}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                </svg>
+                <span className="text-xs mt-1">Mapa</span>
+              </button>
+              
+              <button 
+                className={`flex flex-col items-center p-2 rounded ${mobileView === 'list' ? 'text-primary' : 'text-gray-500'}`}
+                onClick={() => setMobileView('list')}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                </svg>
+                <span className="text-xs mt-1">Lista</span>
+              </button>
+              
+              {/* Mobile location button */}
+              <button 
+                className="flex flex-col items-center p-2 rounded text-gray-500 relative group active:text-primary active:bg-blue-50"
+                onClick={(e) => {
+                  if (mapRef.current) {
+                    mapRef.current.getUserLocation();
+                    setMobileView('map'); // Switch to map view
+                  }
+                }}
+                title="Encontrar minha localização exata atual"
+                aria-label="Encontrar minha localização exata atual"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span className="text-xs mt-1">Localização</span>
+                
+                {/* Enhanced tooltip */}
+                <div className="hidden group-hover:block absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-48 p-2 bg-white rounded-lg shadow-lg text-xs text-gray-700 z-50">
+                  Mostrar minha localização exata atual
+                </div>
+              </button>
+            </div>
+          )}
+          
+          {/* Add padding at the bottom on mobile to account for the nav bar */}
+          {hasSearched && (
+            <div className="lg:hidden h-16"></div>
+          )}
         </div>
       </div>
-      
-      {/* Mobile navigation bar at the bottom */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg p-2 flex justify-around z-20">
-        <button 
-          className={`flex flex-col items-center p-2 rounded ${mobileView === 'map' ? 'text-blue-600' : 'text-gray-500'}`}
-          onClick={() => setMobileView('map')}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-          </svg>
-          <span className="text-xs mt-1">Mapa</span>
-        </button>
-        
-        <button 
-          className={`flex flex-col items-center p-2 rounded ${mobileView === 'list' ? 'text-blue-600' : 'text-gray-500'}`}
-          onClick={() => setMobileView('list')}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-          </svg>
-          <span className="text-xs mt-1">Lista</span>
-        </button>
-        
-        {/* Mobile location button with enhanced tooltip */}
-        <button 
-          className="flex flex-col items-center p-2 rounded text-gray-500 relative group active:text-blue-600 active:bg-blue-50"
-          onClick={(e) => {
-            // Pass the native event directly to maintain the user gesture context
-            console.log("Mobile location button clicked - requesting exact user location");
-            if (mapRef.current) {
-              mapRef.current.getUserLocation();
-              setMobileView('map'); // Switch to map view
-            }
-          }}
-          title="Encontrar minha localização exata atual"
-          aria-label="Encontrar minha localização exata atual"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-          <span className="text-xs mt-1">Localização</span>
-          
-          {/* Enhanced tooltip that appears on hover (mobile) */}
-          <div className="hidden group-hover:block absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-48 p-2 bg-white rounded-lg shadow-lg text-xs text-gray-700 z-50">
-            Mostrar minha localização exata atual
-          </div>
-        </button>
-      </div>
-      
-      {/* Add padding at the bottom on mobile to account for the nav bar */}
-      <div className="lg:hidden h-16"></div>
     </main>
   );
 }
