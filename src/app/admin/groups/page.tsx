@@ -541,8 +541,20 @@ export default function GroupsPage() {
       
       // Apply search filter if there's a search term
       if (searchTerm) {
-        query = query.ilike('name', `%${searchTerm}%`);
+        // Use normalized text for better search matching
+        const searchLower = normalizeText(searchTerm);
+        
+        // Enhanced search across multiple fields
+        query = query.or(
+          `university.ilike.%${searchLower}%,` +
+          `city.ilike.%${searchLower}%,` + 
+          `state.ilike.%${searchLower}%,` + 
+          `country.ilike.%${searchLower}%`
+        );
       }
+      
+      // Add sorting by university name - alphabetical order
+      query = query.order('university', { ascending: true });
       
       // Calculate pagination values
       const startRow = (currentPage - 1) * ITEMS_PER_PAGE;
