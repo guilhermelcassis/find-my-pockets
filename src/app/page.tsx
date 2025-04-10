@@ -821,8 +821,9 @@ export default function Home() {
     // Set the search input's value directly
     if (searchInputRef.current) {
       searchInputRef.current.value = actualSearchTerm;
-      // Keep focus on the input but don't reopen the dropdown
-      searchInputRef.current.focus();
+      
+      // Blur the input to dismiss the keyboard on mobile
+      searchInputRef.current.blur();
     }
     
     // Update last searched refs immediately
@@ -1084,6 +1085,11 @@ export default function Home() {
     // Always clear selected group when performing a new search
     setSelectedGroupId(null);
     
+    // Dismiss keyboard on mobile by blurring the input
+    if (searchInputRef.current) {
+      searchInputRef.current.blur();
+    }
+    
     // Direct use of the current searchType from state is fine here
     // since this is triggered by a form submission, not a React state update
     performSearch(searchTerm, e, false, searchType);
@@ -1192,6 +1198,11 @@ export default function Home() {
                           setShowSuggestions(false);
                           setSearchResults([]);
                           setSearchType(null);
+                          
+                          // Dismiss keyboard on mobile by blurring the input
+                          if (searchInputRef.current) {
+                            searchInputRef.current.blur();
+                          }
                         }}
                         className="absolute right-24 text-indigo-200 hover:text-white focus:outline-none p-2 transition-colors"
                         aria-label="Limpar pesquisa"
