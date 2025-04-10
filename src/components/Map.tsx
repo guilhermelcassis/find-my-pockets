@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { Group } from '../lib/interfaces';
+import CustomInfoWindow from './CustomInfoWindow';
 
 // Export interface to define the map ref methods
 export interface MapRef {
@@ -112,6 +113,13 @@ const Map = forwardRef<MapRef, MapProps>(({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [supportsAdvancedMarkers, setSupportsAdvancedMarkers] = useState(false);
   const [initialZoomDone, setInitialZoomDone] = useState(false);
+  // Let's add a ref that tracks the same value to avoid stale closures
+  const initialZoomDoneRef = useRef(false);
+  
+  // Update the ref when state changes
+  useEffect(() => {
+    initialZoomDoneRef.current = initialZoomDone;
+  }, [initialZoomDone]);
   
   // Create a stable reference to markers by ID
   const markersRef = useRef<{[id: string]: google.maps.Marker | google.maps.marker.AdvancedMarkerElement}>({});
@@ -146,6 +154,39 @@ const Map = forwardRef<MapRef, MapProps>(({
 
   // Add a flag to track if we've tried requesting location
   const [hasTriedLocationRequest, setHasTriedLocationRequest] = useState(false);
+
+  // NEW: State for the selected group and info window
+  const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
+  const [selectedPosition, setSelectedPosition] = useState<google.maps.LatLngLiteral | null>(null);
+
+  // Handle when a marker is clicked - declare this before it's used
+  const handleMarkerClick = useCallback((group: Group) => {
+    // Flag that this was selected from the map
+    selectedFromMapRef.current = true;
+    
+    // Add the ID to our persistent set of markers selected via map clicks
+    markerClickIdsRef.current.add(group.id);
+    
+    // Set selected group for InfoWindow
+    setSelectedGroup(group);
+    setSelectedPosition({
+      lat: group.coordinates.latitude,
+      lng: group.coordinates.longitude
+    });
+    
+    // Call the marker click callback
+    if (onMarkerClick) {
+      setTimeout(() => {
+        onMarkerClick(group.id);
+      }, 10);
+    }
+  }, [onMarkerClick]);
+
+  // Handle closing the InfoWindow
+  const handleInfoWindowClose = useCallback(() => {
+    setSelectedGroup(null);
+    setSelectedPosition(null);
+  }, []);
 
   // Initialize map function (called after Google Maps is loaded)
   const initializeMap = useCallback(() => {
@@ -226,6 +267,7 @@ const Map = forwardRef<MapRef, MapProps>(({
       setInfoWindow(newInfoWindow);
       setIsMapReady(true);
       setInitialZoomDone(true); // Mark initial zoom as done to prevent auto-zoom
+      initialZoomDoneRef.current = true; // Update the ref as well
       
       console.log("Map initialized successfully");
       
@@ -602,36 +644,33 @@ const Map = forwardRef<MapRef, MapProps>(({
     // Format meeting times for display
     const meetingSchedule = group.meetingTimes && group.meetingTimes.length > 0
       ? group.meetingTimes.map(meeting => {
-          let meetingText = `${meeting.dayofweek} at ${meeting.time}`;
+          let meetingText = `${meeting.dayofweek} às ${meeting.time}`;
           if (meeting.local) {
-            meetingText += ` (${meeting.local})`;
+            meetingText += ` <span class="meeting-local">(${meeting.local})</span>`;
           }
           return meetingText;
         }).join('<br>')
-      : 'No scheduled meetings';
+      : 'Horários não disponíveis';
     
     // Format the leader information
     const leaderInfo = group.leader?.name
-      ? `<strong>${group.leader.name}</strong>${group.leader.curso ? ` (${group.leader.curso})` : ''}`
-      : 'Contact for leader information';
+      ? `${group.leader.name}${group.leader.curso ? ` <span class="leader-curso">(${group.leader.curso})</span>` : ''}`
+      : 'Informações do líder não disponíveis';
     
     // Generate contact options
     let contactOptions = '';
     
     if (group.leader?.phone) {
-      const phoneLabel = 'Call or WhatsApp';
       const phoneNumber = group.leader.phone.startsWith('+') ?
         group.leader.phone.replace(/[^\d+]/g, '') :
         group.leader.phone.replace(/\D/g, '');
       
       contactOptions += `
-        <a href="tel:${phoneNumber}" class="contact-button phone-button" target="_blank" rel="noopener noreferrer">
-          <div class="icon">📞</div>
-          <div class="label">${phoneLabel}</div>
-        </a>
         <a href="https://wa.me/${phoneNumber}" class="contact-button whatsapp-button" target="_blank" rel="noopener noreferrer">
-          <div class="icon">💬</div>
-          <div class="label">WhatsApp</div>
+          <svg class="social-icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347" />
+          </svg>
+          <span>WhatsApp</span>
         </a>
       `;
     }
@@ -643,31 +682,233 @@ const Map = forwardRef<MapRef, MapProps>(({
         
       contactOptions += `
         <a href="https://instagram.com/${instagramUsername}" class="contact-button instagram-button" target="_blank" rel="noopener noreferrer">
-          <div class="icon">📸</div>
-          <div class="label">Instagram</div>
+          <svg class="social-icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+          </svg>
+          <span>Instagram</span>
         </a>
       `;
     }
     
-    // Return the full HTML content
+    // Add Google Maps directions
+    if (group.coordinates) {
+      contactOptions += `
+        <a href="https://www.google.com/maps/search/?api=1&query=${group.coordinates.latitude},${group.coordinates.longitude}" class="contact-button maps-button" target="_blank" rel="noopener noreferrer">
+          <svg class="social-icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+            <circle cx="12" cy="10" r="3"></circle>
+          </svg>
+          <span>Como Chegar</span>
+        </a>
+      `;
+    }
+    
+    // Return the full HTML content with improved styling
     return `
       <div class="info-window">
-        <h3 class="university">${group.university}</h3>
-        <div class="location">${group.city}, ${group.state}</div>
+        <style>
+          .info-window {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            padding: 0;
+            width: 100%;
+            max-width: 320px;
+            color: #1f2937;
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
+          }
+          
+          .info-header {
+            background: linear-gradient(135deg, #4299e1, #3182ce);
+            padding: 16px 20px;
+            position: relative;
+            color: white;
+          }
+          
+          .university-icon {
+            width: 40px;
+            height: 40px;
+            background-color: rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 12px;
+          }
+          
+          .university-icon svg {
+            width: 24px;
+            height: 24px;
+            color: white;
+          }
+          
+          .info-window h3 {
+            margin: 0 0 6px 0;
+            font-size: 18px;
+            font-weight: 700;
+            color: white;
+            line-height: 1.3;
+          }
+          
+          .info-content {
+            padding: 16px;
+            background: white;
+          }
+          
+          .info-window .location {
+            display: flex;
+            align-items: center;
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.95);
+            font-weight: 500;
+          }
+          
+          .info-window .location-icon {
+            width: 14px;
+            height: 14px;
+            margin-right: 6px;
+            color: white;
+            flex-shrink: 0;
+          }
+          
+          .info-window .address {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.8);
+            margin-top: 4px;
+            padding-left: 20px;
+          }
+          
+          .info-section {
+            padding-bottom: 16px;
+            margin-bottom: 16px;
+            border-bottom: 1px solid #e5e7eb;
+          }
+          
+          .info-section:last-child {
+            padding-bottom: 0;
+            margin-bottom: 0;
+            border-bottom: none;
+          }
+          
+          .info-label {
+            font-weight: 600;
+            font-size: 14px;
+            color: #4b5563;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+          }
+          
+          .info-icon {
+            width: 16px;
+            height: 16px;
+            margin-right: 8px;
+            color: #3b82f6;
+            flex-shrink: 0;
+          }
+          
+          .meeting-info, .leader-info {
+            font-size: 14px;
+            color: #4b5563;
+            padding-left: 24px;
+            line-height: 1.5;
+          }
+          
+          .leader-curso, .meeting-local {
+            color: #6b7280;
+            font-weight: normal;
+          }
+          
+          .contact-options {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 12px;
+          }
+          
+          .contact-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px 12px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+          }
+          
+          .social-icon {
+            width: 16px;
+            height: 16px;
+            margin-right: 8px;
+          }
+          
+          .whatsapp-button {
+            background-color: #25D366;
+            color: white;
+            border: none;
+          }
+          
+          .instagram-button {
+            background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+            color: white;
+            border: none;
+          }
+          
+          .maps-button {
+            background-color: #4285F4;
+            color: white;
+            border: none;
+          }
+        </style>
         
-        ${group.fulladdress ? `<div class="address">${group.fulladdress}</div>` : ''}
-        
-        <div class="meeting-info">
-          <div class="info-label">Meetings:</div>
-          <div>${meetingSchedule}</div>
+        <div class="info-header">
+          <div class="university-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+            </svg>
+          </div>
+          
+          <h3>${group.university}</h3>
+          <div class="location">
+            <svg class="location-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"></path>
+              <circle cx="12" cy="10" r="3"></circle>
+            </svg>
+            ${group.city}, ${group.state}
+          </div>
+          
+          ${group.fulladdress ? `<div class="address">${group.fulladdress}</div>` : ''}
         </div>
         
-        <div class="contact-section">
-          <div class="info-label">Leader:</div>
-          <div>${leaderInfo}</div>
+        <div class="info-content">
+          <div class="info-section">
+            <div class="info-label">
+              <svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+              </svg>
+              Horários de Encontro
+            </div>
+            <div class="meeting-info">${meetingSchedule}</div>
+          </div>
           
-          <div class="contact-options">
-            ${contactOptions}
+          <div class="info-section">
+            <div class="info-label">
+              <svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+              Líder
+            </div>
+            <div class="leader-info">${leaderInfo}</div>
+            
+            <div class="contact-options">
+              ${contactOptions}
+            </div>
           </div>
         </div>
       </div>
@@ -676,8 +917,8 @@ const Map = forwardRef<MapRef, MapProps>(({
 
   // Update the effect that adds the markers to use the generateInfoWindowContent
   useEffect(() => {
-    // Only run when map and infoWindow are available and in ready state
-    if (!isMapReady || !map || !infoWindow) {
+    // Only run when map is available and in ready state
+    if (!isMapReady || !map) {
       return;
     }
 
@@ -685,12 +926,9 @@ const Map = forwardRef<MapRef, MapProps>(({
     if (isUpdatingMarkers.current) return;
     
     // Check if groups array has the same ids as before - if so, don't redraw markers
-    // This prevents unnecessary marker redraws when only isTyping state changes
     const currentGroupIds = groups.map(g => g.id).sort().join(',');
     
     // If nothing has changed, only selectedGroupId, don't redraw all markers
-    // The key change: We now properly handle selectedGroupId by not redrawing all markers
-    // just because the selectedGroupId changed - instead we'll handle that in the other effect
     if (currentGroupIds === prevGroupIds.current) {
       // Don't redraw markers just because a marker was selected
       console.log("Skipping marker redraw - groups haven't changed");
@@ -730,11 +968,11 @@ const Map = forwardRef<MapRef, MapProps>(({
       });
 
       console.log("Adding", validGroups.length, "markers to map");
-      console.log("Found", validGroups.length, "valid active groups out of", groups.length, "total groups");
 
-      // First close any open info windows to reset state
-      if (infoWindow) {
-        infoWindow.close();
+      // Clear selected group state when rebuilding markers
+      if (selectedGroup === null || !validGroups.some(g => g.id === selectedGroup.id)) {
+        setSelectedGroup(null);
+        setSelectedPosition(null);
       }
       
       // Clear existing markers from the map
@@ -755,20 +993,6 @@ const Map = forwardRef<MapRef, MapProps>(({
         markersRef.current = {};
         isUpdatingMarkers.current = false;
         return;
-      }
-
-      // Find the selected group first if any
-      const selectedGroup = selectedGroupId 
-        ? validGroups.find(g => g.id === selectedGroupId) 
-        : null;
-      
-      if (selectedGroup) {
-        console.log('Selected group found:', selectedGroup.university, 
-                   'ID:', selectedGroup.id,
-                   'Coordinates:', selectedGroup.coordinates.latitude, selectedGroup.coordinates.longitude);
-      } else if (selectedGroupId) {
-        console.log('Selected group NOT found. Looking for ID:', selectedGroupId, 
-                   'Available IDs:', validGroups.map(g => g.id).join(', '));
       }
 
       // Create new arrays to store markers
@@ -800,71 +1024,18 @@ const Map = forwardRef<MapRef, MapProps>(({
         newMarkersArray.push(marker);
         newMarkersMap[group.id] = marker;
 
-        // Generate the info window content using our helper function
-        const content = generateInfoWindowContent(group);
-
         // Add event listeners for markers
         if (marker) {
           // For legacy marker
           if (marker instanceof google.maps.Marker) {
             marker.addListener('click', () => {
               console.log('Legacy marker clicked for group:', group.id, group.university);
-              
-              // Flag that this was selected from the map
-              selectedFromMapRef.current = true;
-              
-              // Also add the ID to our persistent set of markers selected via map clicks
-              markerClickIdsRef.current.add(group.id);
-              
-              // First set the info window directly without triggering a full redraw
-              infoWindow.close();
-              
-              // Generate the content
-              const content = generateInfoWindowContent(group);
-              infoWindow.setContent(content);
-              
-              // Open the info window
-              infoWindow.open(map, marker);
-              
-              // DO NOT center the map or change zoom - just show the info window
-              
-              // Only call the onMarkerClick callback at the very end
-              // This will update selectedGroupId in the parent component
-              if (onMarkerClick) {
-                // Add a small delay to prevent immediate re-renders
-                setTimeout(() => {
-                  onMarkerClick(group.id);
-                }, 10);
-              }
+              handleMarkerClick(group);
             });
           } else {
-            // For advanced marker - use the standard 'click' event for AdvancedMarkerElement
-            const position = { 
-              lat: group.coordinates.latitude, 
-              lng: group.coordinates.longitude 
-            };
-            
+            // For advanced marker
             marker.addListener('click', () => {
               console.log('Advanced marker clicked for group:', group.id, group.university);
-              
-              // Flag that this was selected from the map
-              selectedFromMapRef.current = true;
-              
-              // Also add the ID to our persistent set of markers selected via map clicks
-              markerClickIdsRef.current.add(group.id);
-              
-              // First set the info window directly without triggering a full redraw
-              infoWindow.close();
-              
-              // Generate the content
-              const content = generateInfoWindowContent(group);
-              infoWindow.setContent(content);
-              
-              // Position and open the info window WITHOUT changing map center or zoom
-              infoWindow.setPosition(position);
-              infoWindow.open(map);
-              
-              // DO NOT center the map or change zoom - just show the info window
               
               // Add visual feedback - temporarily highlight the marker
               if (marker.content) {
@@ -888,14 +1059,7 @@ const Map = forwardRef<MapRef, MapProps>(({
                 }
               }
               
-              // Only call the onMarkerClick callback at the very end
-              // This will update selectedGroupId in the parent component
-              if (onMarkerClick) {
-                // Add a small delay to prevent immediate re-renders
-                setTimeout(() => {
-                  onMarkerClick(group.id);
-                }, 10);
-              }
+              handleMarkerClick(group);
             });
           }
         }
@@ -906,21 +1070,21 @@ const Map = forwardRef<MapRef, MapProps>(({
       markersRef.current = newMarkersMap;
 
       // Update immediate centering for selected group
-      if (selectedGroup && map) {
-        const centerPosition = {
-          lat: selectedGroup.coordinates.latitude,
-          lng: selectedGroup.coordinates.longitude
-        };
-        
-        console.log('Initial positioning for selected group:', selectedGroup.university);
-        
-        // Center map once - don't need to do this again since we have the separate effect
-        map.setCenter(centerPosition);
-        map.setZoom(15);
-        
-        // The info window opening for selected markers is now handled in the selectedGroupId effect
-        // This prevents duplicate info window opening and reduces render cycles
-      } else if (newMarkersArray.length > 0 && !initialZoomDone) {
+      if (selectedGroupId && map) {
+        const selectedGroup = validGroups.find(g => g.id === selectedGroupId);
+        if (selectedGroup) {
+          const centerPosition = {
+            lat: selectedGroup.coordinates.latitude,
+            lng: selectedGroup.coordinates.longitude
+          };
+          
+          console.log('Initial positioning for selected group:', selectedGroup.university);
+          
+          // Center map once
+          map.setCenter(centerPosition);
+          map.setZoom(15);
+        }
+      } else if (newMarkersArray.length > 0 && !initialZoomDoneRef.current) {
         // Only fit bounds on initial load or when no specific selection
         try {
           const bounds = new window.google.maps.LatLngBounds();
@@ -943,112 +1107,30 @@ const Map = forwardRef<MapRef, MapProps>(({
             }
           });
           
-          // Apply bounds with padding
-          map.fitBounds(bounds, 40);
+          // Ensure we have at least two markers or the bounds are valid
+          if (bounds.getNorthEast().equals(bounds.getSouthWest())) {
+            // If there's only one marker, zoom in appropriately
+            map.setZoom(13);
+          } else {
+            // Fit to all markers
+            console.log('Setting initial bounds to fit all markers');
+            map.fitBounds(bounds);
+          }
           
-          // Don't zoom in too far on single marker, and maintain initial zoom
-          setTimeout(() => {
-            const currentZoom = map.getZoom();
-            if (currentZoom !== undefined && currentZoom > Math.min(zoom + 2, 15)) {
-              map.setZoom(Math.min(zoom + 2, 15));
-            }
-          }, 300);
-          
+          // Mark initial zoom as done
           setInitialZoomDone(true);
-        } catch (error) {
-          console.error("Error setting map bounds:", error);
-          map.setCenter({ lat: centerLat, lng: centerLng });
-          map.setZoom(zoom);
+          initialZoomDoneRef.current = true; // Update the ref immediately
+        } catch (e) {
+          console.warn('Error setting bounds:', e);
         }
       }
-
-      // Clustering logic has been removed
     } catch (error) {
-      console.error("Error adding markers to map:", error);
+      console.error('Error creating markers:', error);
     } finally {
+      // Reset the updating flag
       isUpdatingMarkers.current = false;
     }
-    
-    // Cleanup function to clear any timeouts
-    return () => {
-      timeoutIds.forEach(id => clearTimeout(id));
-    };
-  }, [isMapReady, map, infoWindow, groups, selectedGroupId, centerLat, centerLng, zoom, supportsAdvancedMarkers, createAdvancedMarker, createLegacyMarker, initialZoomDone, generateInfoWindowContent, onMarkerClick]);
-
-  // Update the separate effect for selectedGroupId to use the generateInfoWindowContent function
-  useEffect(() => {
-    // Skip if map or infoWindow is not ready yet
-    if (!map || !infoWindow || !isMapReady) return;
-    
-    // Don't proceed if we're in the middle of updating markers
-    if (isUpdatingMarkers.current) return;
-    
-    // Get the reference to the marker directly from our map
-    const marker = selectedGroupId ? markersRef.current[selectedGroupId] : null;
-    
-    // Find the selected group
-    const selectedGroup = selectedGroupId 
-      ? groups.find(g => g.id === selectedGroupId) 
-      : null;
-    
-    if (selectedGroup && marker) {
-      console.log('Handling selected marker for:', selectedGroup.university, 'without full redraw');
-      
-      // Prepare position for info window
-      const position = {
-        lat: selectedGroup.coordinates.latitude,
-        lng: selectedGroup.coordinates.longitude
-      };
-      
-      // Only zoom and center if:
-      // 1. NOT selected directly from the map (using both the flag and our persistent set)
-      // 2. AND this is a different group than the last one we centered on
-      const wasClickedOnMap = selectedFromMapRef.current || 
-        (selectedGroupId ? markerClickIdsRef.current.has(selectedGroupId) : false);
-      
-      // Skip map updating completely if the user is currently typing
-      // This prevents map operations from stealing focus from the search input
-      if (window.isUserTyping === true) {
-        console.log('Skipping map update completely - user is currently typing');
-        return;
-      }
-      
-      if (!wasClickedOnMap && selectedGroupId !== lastCenteredGroupIdRef.current) {
-        console.log('Centering map - selection was NOT from map click and is a different group');
-        // Center the map without forcing a full marker redraw
-        map.setCenter(position);
-        map.setZoom(15);
-        
-        // Update the last centered group ID
-        lastCenteredGroupIdRef.current = selectedGroupId;
-      } else {
-        if (wasClickedOnMap) {
-          console.log('Skipping map centering - selection was from map click');
-        } else {
-          console.log('Skipping map centering - same group ID as last centered');
-        }
-      }
-      
-      // Generate info window content using our helper function
-      const content = generateInfoWindowContent(selectedGroup);
-        
-      // Open info window on the marker
-      infoWindow.setContent(content);
-      
-      if (marker instanceof google.maps.Marker) {
-        infoWindow.open(map, marker);
-      } else {
-        // For advanced marker
-        infoWindow.setPosition(position);
-        infoWindow.open(map);
-      }
-      
-      // Reset the flag after handling this selection
-      selectedFromMapRef.current = false;
-    } else if (selectedGroupId) {
-      console.warn('Selected group or marker not found for ID:', selectedGroupId);
-    }
-  }, [selectedGroupId, map, infoWindow, isMapReady, groups, generateInfoWindowContent]);
+  }, [map, groups, selectedGroupId, markers, isMapReady, supportsAdvancedMarkers, handleMarkerClick, selectedGroup]);
 
   // Configure the info window to look better
   useEffect(() => {
@@ -1060,15 +1142,15 @@ const Map = forwardRef<MapRef, MapProps>(({
           const iwOuter = document.querySelector('.gm-style-iw-a') as HTMLElement;
           if (iwOuter) {
             // Add shadow and rounded corners
-            iwOuter.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.2)';
-            iwOuter.style.borderRadius = '8px';
+            iwOuter.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.12)';
+            iwOuter.style.borderRadius = '12px';
             
             // Find close button and style it
             const closeButton = document.querySelector('.gm-ui-hover-effect') as HTMLElement;
             if (closeButton) {
-              closeButton.style.opacity = '1';
-              closeButton.style.right = '8px';
-              closeButton.style.top = '8px';
+              closeButton.style.opacity = '0.6';
+              closeButton.style.right = '6px';
+              closeButton.style.top = '6px';
               closeButton.style.borderRadius = '50%';
             }
           }
@@ -1260,7 +1342,7 @@ const Map = forwardRef<MapRef, MapProps>(({
               <style>
                 @keyframes pulse {
                   0% { transform: scale(1); opacity: 1; }
-                  50% { transform: scale(2.5); opacity: 0.3; }
+                  50% { transform: scale(2.5); opacity: 0.4; }
                   100% { transform: scale(1); opacity: 1; }
                 }
               </style>
@@ -1452,12 +1534,6 @@ const Map = forwardRef<MapRef, MapProps>(({
         return;
       }
       
-      // Skip if info window is not available
-      if (!infoWindow) {
-        console.log('Cannot show details: infoWindow is not initialized');
-        return;
-      }
-      
       // Set flags to indicate this was NOT selected from the map
       selectedFromMapRef.current = false;
       lastCenteredGroupIdRef.current = groupId; // Prevent re-centering on future selectedGroupId updates
@@ -1465,25 +1541,12 @@ const Map = forwardRef<MapRef, MapProps>(({
       // If this is called from the list, remove the ID from the set of map-clicked markers
       markerClickIdsRef.current.delete(groupId);
       
-      // Close any open info windows first
-      infoWindow.close();
-      
-      // Generate the info window content
-      const content = generateInfoWindowContent(group);
-      infoWindow.setContent(content);
-      
-      // Open the info window without changing map center or zoom
-      if (marker instanceof google.maps.Marker) {
-        infoWindow.open(map, marker);
-      } else {
-        // For advanced marker
-        const position = {
-          lat: group.coordinates.latitude,
-          lng: group.coordinates.longitude
-        };
-        infoWindow.setPosition(position);
-        infoWindow.open(map);
-      }
+      // Set selected group for InfoWindow
+      setSelectedGroup(group);
+      setSelectedPosition({
+        lat: group.coordinates.latitude,
+        lng: group.coordinates.longitude
+      });
       
       // Notify parent component about the marker click (without zooming)
       if (onMarkerClick) {
@@ -1540,18 +1603,25 @@ const Map = forwardRef<MapRef, MapProps>(({
       <style jsx global>{`
         /* InfoWindow styling */
         .gm-style-iw {
-          padding: 2px !important;
-          border-radius: 8px !important;
-          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15) !important;
+          padding: 0 !important;
+          border-radius: 12px !important;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12) !important;
+          overflow: visible !important;
         }
 
         .gm-style-iw-d {
           overflow: hidden !important;
           max-height: none !important;
+          padding: 0 !important;
+        }
+
+        .gm-style-iw-c {
+          padding: 0 !important;
+          border-radius: 12px !important;
         }
 
         .gm-ui-hover-effect {
-          opacity: 0.8 !important;
+          opacity: 0.6 !important;
           background: #ffffff !important;
           border-radius: 50% !important;
           width: 26px !important;
@@ -1562,6 +1632,7 @@ const Map = forwardRef<MapRef, MapProps>(({
           align-items: center !important;
           justify-content: center !important;
           box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+          transition: opacity 0.2s ease !important;
         }
 
         .gm-ui-hover-effect img {
@@ -1606,7 +1677,15 @@ const Map = forwardRef<MapRef, MapProps>(({
         }}
       ></div>
       
-      {/* Map Legend and Legend toggle removed */}
+      {/* Render the CustomInfoWindow when a group is selected */}
+      {map && selectedGroup && selectedPosition && (
+        <CustomInfoWindow
+          group={selectedGroup}
+          map={map}
+          position={selectedPosition}
+          onClose={handleInfoWindowClose}
+        />
+      )}
       
       {/* User location error message with improved visibility for permission errors */}
       {userLocationError && (

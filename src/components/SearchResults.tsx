@@ -7,158 +7,226 @@ interface SearchResultsProps {
   selectedGroupId: string | null;
 }
 
-export default function SearchResults({ 
-  searchResults, 
+const SearchResults: React.FC<SearchResultsProps> = ({
+  searchResults,
   handleResultClick,
-  selectedGroupId 
-}: SearchResultsProps) {
-
-  // Group results by location
+  selectedGroupId,
+}) => {
+  // Group results by location (city, state)
   const locationGroups: Record<string, Group[]> = {};
   const locationOrder: string[] = [];
-  
-  // Group results by location
-  searchResults.forEach(group => {
-    const locationKey = `${group.city}|${group.state}`;
-    const displayKey = `${group.city}, ${group.state}`;
+
+  searchResults.forEach((group) => {
+    const locationKey = `${group.city}, ${group.state}`;
     
     if (!locationGroups[locationKey]) {
       locationGroups[locationKey] = [];
       locationOrder.push(locationKey);
     }
+    
     locationGroups[locationKey].push(group);
   });
 
-  return (
-    <div>
-      <h2 className="text-xl font-semibold mb-4">Resultados ({searchResults.length})</h2>
-      <div className="text-xs text-gray-500 -mt-3 mb-3">
-        <p>Clique em um resultado para visualizá-lo no mapa</p>
-        <p className="mt-1 italic">Dica: clicar aqui na lista <span className="text-primary">zoom</span> no local, mas clicar no mapa <span className="text-primary">não altera o zoom</span></p>
-      </div>
+  if (searchResults.length === 0) {
+    return null;
+  }
 
-      {/* Render each location group */}
-      {locationOrder.map(locationKey => {
-        const groups = locationGroups[locationKey];
-        const [city, state] = locationKey.split('|');
-        
-        return (
-          <div key={locationKey} className="mb-6">
-            <div className="flex items-center justify-between bg-gray-100 p-2 rounded-t mb-3">
-              <h3 className="font-semibold text-gray-700">
-                {city}, {state}
-              </h3>
-              <span className="text-sm bg-blue-500 text-white px-2 py-1 rounded-full">
-                {groups.length} {groups.length === 1 ? 'grupo' : 'grupos'}
+  return (
+    <div className="w-full">
+      <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200">
+        <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-5 border-b border-blue-200 flex justify-between items-center relative overflow-hidden">
+          {/* Decorative elements */}
+          <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -mt-20 -mr-20"></div>
+          <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full -mb-12 -ml-12"></div>
+          
+          <div className="relative z-10">
+            <h3 className="text-xl font-semibold text-white flex items-center">
+              <span className="bg-white/20 h-8 w-8 inline-flex items-center justify-center rounded-lg mr-2 backdrop-blur-sm">
+                <span className="font-bold">{searchResults.length}</span>
               </span>
-            </div>
-            
-            <div className="grid grid-cols-1 gap-4">
-              {groups.map((group) => (
-                <div 
-                  key={group.id} 
-                  data-group-id={group.id}
-                  className={`mb-4 p-4 rounded-lg shadow cursor-pointer transition-all ${
-                    selectedGroupId === group.id 
-                      ? 'bg-blue-50 border-2 border-blue-500'
-                      : 'bg-white hover:bg-gray-50'
-                  }`}
-                  onClick={() => handleResultClick(group.id)}
-                >
-                  <div className="flex flex-col">
-                    <h3 className="font-bold text-base">{group.university}</h3>
-                    <p className="text-gray-600 text-sm">
-                      {group.city}, {group.state}, {group.country}
-                    </p>
-                    
-                    {/* Meeting details */}
-                    <div className="mt-2">
-                      <p className="text-xs">
-                        <span className="font-medium">Encontros:</span> {group.meetingTimes && group.meetingTimes.length > 0 ? 
-                          group.meetingTimes.map(meeting => {
-                            let meetingText = `${meeting.dayofweek} às ${meeting.time}`;
-                            if (meeting.local) {
-                              meetingText += ` (${meeting.local})`;
-                            }
-                            return meetingText;
-                          }).join(', ') : 
-                          'Informações de horário não disponíveis'
-                        }
-                      </p>
+              <span>
+                resultado{searchResults.length !== 1 ? 's' : ''} encontrado{searchResults.length !== 1 ? 's' : ''}
+              </span>
+            </h3>
+            <p className="text-sm text-blue-50 mt-1 pl-1">
+              Clique em um grupo para ver sua localização no mapa
+            </p>
+          </div>
+          <button 
+            className="relative z-10 h-9 w-9 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 focus:outline-none focus:ring-2 focus:ring-white/50 transition-all duration-200"
+            aria-label="Fechar resultados"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="p-5">
+          {locationOrder.map((location) => (
+            <div 
+              key={location} 
+              className="mb-6 last:mb-0 pb-6 last:pb-0 border-b last:border-b-0 border-gray-100"
+            >
+              <div className="flex items-center mb-4">
+                <div className="p-2 bg-blue-50 rounded-lg mr-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h4 className="font-medium text-gray-900">
+                    {location}
+                  </h4>
+                  <span className="text-sm text-gray-500">
+                    {locationGroups[location].length} grupo{locationGroups[location].length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+              </div>
+              
+              <div className="space-y-3">
+                {locationGroups[location].map((group) => (
+                  <div 
+                    key={group.id}
+                    className={`p-4 rounded-xl transition-all duration-300 cursor-pointer relative ${
+                      selectedGroupId === group.id
+                        ? 'bg-blue-50 border border-blue-400 shadow-sm'
+                        : 'bg-white hover:bg-gray-50 border border-gray-100 hover:border-gray-200'
+                    }`}
+                    data-group-id={group.id}
+                    onClick={() => handleResultClick(group.id)}
+                  >
+                    <div className="flex items-start mb-3">
+                      <div className={`h-12 w-12 flex-shrink-0 rounded-lg flex items-center justify-center overflow-hidden ${
+                        selectedGroupId === group.id ? 'bg-blue-100' : 'bg-gray-100'
+                      }`}>
+                        {group.university && (
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path d="M12 14l9-5-9-5-9 5 9 5z" />
+                            <path d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14zm-4 6v-7.5l4-2.222" />
+                          </svg>
+                        )}
+                      </div>
+                      <div className="ml-3 flex-1">
+                        <h5 className="font-medium text-base text-gray-900">{group.university}</h5>
+                        
+                        <div className="flex flex-wrap gap-3 mt-1.5">
+                          {group.meetingTimes && group.meetingTimes.length > 0 && (
+                            <div className="flex items-center text-sm text-gray-600">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 mr-1 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              {group.meetingTimes[0].dayofweek} • {group.meetingTimes[0].time}
+                            </div>
+                          )}
+                          
+                          {group.leader && (
+                            <div className="flex items-center text-sm text-gray-600">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 mr-1 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                              </svg>
+                              {group.leader.name}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                     
-                    {/* Contact Section */}
-                    <div className="mt-3 flex flex-row justify-between items-center">
-                      {/* Leader Information */}
-                      <div>
-                        <p className="text-xs">
-                          <span className="font-medium">Líder:</span> {group.leader?.name}
-                        </p>
-                      </div>
+                    {/* Improved action buttons with better mobile visibility */}
+                    <div className="grid grid-cols-3 gap-2 mt-4">
+                      {group.leader && group.leader.phone && (
+                        <a 
+                          href={`https://wa.me/55${group.leader.phone.replace(/\D/g, '')}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-center py-3 px-2 rounded-xl bg-green-50 text-green-600 font-medium text-sm transition-all duration-200 hover:bg-green-500 hover:text-white hover:shadow-md min-h-[48px]"
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label="Contato via WhatsApp"
+                        >
+                          <svg 
+                            className="h-4 w-4 sm:mr-1.5" 
+                            viewBox="0 0 24 24" 
+                            fill="none" 
+                            xmlns="http://www.w3.org/2000/svg"
+                            stroke="currentColor" 
+                            strokeWidth="2" 
+                            strokeLinecap="round" 
+                            strokeLinejoin="round"
+                          >
+                            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+                          </svg>
+                          <span className="hidden sm:inline">WhatsApp</span>
+                        </a>
+                      )}
                       
-                      {/* Action Buttons */}
-                      <div className="flex space-x-1">
-                        {/* WhatsApp Button */}
-                        {group.leader?.phone && (
-                          <a 
-                            href={`https://wa.me/${
-                              group.leader.phone.startsWith('+') ? 
-                              group.leader.phone.replace(/[^\d+]/g, '') : 
-                              group.leader.phone.replace(/\D/g, '')
-                            }`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded text-xs inline-flex items-center"
-                            title="WhatsApp"
-                            onClick={(e) => e.stopPropagation()} // Prevent result click handler from firing
+                      {group.instagram && (
+                        <a 
+                          href={`https://instagram.com/${group.instagram.replace('@', '')}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-center py-3 px-2 rounded-xl bg-purple-50 text-purple-600 font-medium text-sm transition-all duration-200 hover:bg-purple-500 hover:text-white hover:shadow-md min-h-[48px]"
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label="Página no Instagram"
+                        >
+                          <svg 
+                            className="h-4 w-4 sm:mr-1.5" 
+                            viewBox="0 0 24 24" 
+                            fill="none" 
+                            stroke="currentColor" 
+                            strokeWidth="2" 
+                            strokeLinecap="round" 
+                            strokeLinejoin="round"
                           >
-                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
-                            </svg>
-                          </a>
-                        )}
-                        
-                        {/* Instagram Button */}
-                        {group.instagram && (
-                          <a 
-                            href={`https://instagram.com/${group.instagram.replace('@', '')}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="bg-purple-500 hover:bg-purple-600 text-white px-2 py-1 rounded text-xs inline-flex items-center"
-                            title="Instagram"
-                            onClick={(e) => e.stopPropagation()} // Prevent result click handler from firing
+                            <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                            <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+                            <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+                          </svg>
+                          <span className="hidden sm:inline">Instagram</span>
+                        </a>
+                      )}
+                      
+                      {group.coordinates && (
+                        <a 
+                          href={`https://www.google.com/maps/search/?api=1&query=${group.coordinates.latitude},${group.coordinates.longitude}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-center py-3 px-2 rounded-xl bg-blue-50 text-blue-600 font-medium text-sm transition-all duration-200 hover:bg-blue-500 hover:text-white hover:shadow-md min-h-[48px]"
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label="Ver no Google Maps"
+                        >
+                          <svg 
+                            className="h-4 w-4 sm:mr-1.5" 
+                            viewBox="0 0 24 24" 
+                            fill="none" 
+                            stroke="currentColor" 
+                            strokeWidth="2"
+                            strokeLinecap="round" 
+                            strokeLinejoin="round"
                           >
-                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/>
-                            </svg>
-                          </a>
-                        )}
-                        
-                        {/* Google Maps Link */}
-                        {group.fulladdress && (
-                          <a 
-                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(group.fulladdress)}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs inline-flex items-center"
-                            title="Como Chegar"
-                            onClick={(e) => e.stopPropagation()} // Prevent result click handler from firing
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                          </a>
-                        )}
-                      </div>
+                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                            <circle cx="12" cy="10" r="3"></circle>
+                          </svg>
+                          <span className="hidden sm:inline">Mapa</span>
+                        </a>
+                      )}
+                    </div>
+                    
+                    {/* Mobile-only helper text */}
+                    <div className="mt-2 text-xs text-center text-gray-400 sm:hidden">
+                      Toque nos ícones para acessar
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        );
-      })}
+          ))}
+        </div>
+      </div>
     </div>
   );
-} 
+};
+
+export default SearchResults; 
