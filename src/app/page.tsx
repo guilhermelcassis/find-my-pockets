@@ -909,6 +909,11 @@ export default function Home() {
     // Use directType if provided, otherwise use the state
     const effectiveType = directType !== undefined ? directType : searchType;
     
+    // Ensure searchType state is synchronized with the effective type being used
+    if (directType !== undefined) {
+      setSearchType(directType);
+    }
+    
     console.log("performSearch called with term:", term, "type:", effectiveType, "force:", forceSearch);
     
     // Don't perform searches with empty or very short terms
@@ -1116,8 +1121,7 @@ export default function Home() {
       searchInputRef.current.blur();
     }
     
-    // Direct use of the current searchType from state is fine here
-    // since this is triggered by a form submission, not a React state update
+    // Pass the current searchType explicitly to ensure consistency
     performSearch(searchTerm, e, false, searchType);
     
     // Close the suggestions dropdown when search is performed
@@ -1366,6 +1370,8 @@ export default function Home() {
                       const activeGroups = allGroups.filter(group => group.active !== false);
                       setSearchResults(activeGroups);
                       setSearchType(null);
+                      // Also clear the search type reference to prevent type persistence
+                      lastSearchedTypeRef.current = null;
                       setHasSearched(true);
                       // Reset search but keep all groups visible on map
                       setFilteredGroups(activeGroups);
@@ -1411,7 +1417,9 @@ export default function Home() {
                       type="button"
                       onClick={(e: React.MouseEvent) => {
                         setSearchTerm(suggestion);
-                        performSearch(suggestion, e as unknown as React.FormEvent, true);
+                        // Explicitly set searchType to null and pass null as directType
+                        setSearchType(null);
+                        performSearch(suggestion, e as unknown as React.FormEvent, true, null);
                       }}
                       className="px-4 py-2 bg-white/10 backdrop-blur-sm text-white rounded-full text-sm hover:bg-white/20 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-white/30 border border-white/10 shadow-sm"
                     >
