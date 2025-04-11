@@ -12,27 +12,45 @@
 
 # testing
 /coverage
+/.nyc_output
+/cypress/videos/
+/cypress/screenshots/
 
 # next.js
 /.next/
 /out/
+.next/
+.next
 
 # production
 /build
+/dist
 
 # misc
 .DS_Store
 *.pem
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
 
 # debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+logs
+*.log
 
-# env files (can opt-in for committing if needed)
+# local env files
 .env*
 .env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
 # vercel
 .vercel
@@ -41,11 +59,40 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# editor files
 .cursor/
+.history/
 
+# sensitive files
 serviceAccountKey.json
+firebase-adminsdk.json
+*-secret.json
+*-key.json
 
+# project specific files
 leaders.txt
 lideres.xlsx
 universities.xlsx
 MIGRATION-FIREBASE-TO-SUPABASE.md
+
+# scripts output directories
+/public/icons-purple
+/public/icons-original-backup
+/scripts/node_modules
+
+# cache and temporary files
+.cache/
+.temp/
+.tmp/
+tmp/
+temp/
+*.tmp
+*.swp
+*.swo
+
+# package managers
+package-lock.json
+yarn.lock
+.npm
+.yalc
+yalc.lock

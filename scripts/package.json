@@ -1,0 +1,14 @@
+{
+  "name": "icon-processor",
+  "version": "1.0.0",
+  "description": "Script to add purple backgrounds to icons",
+  "main": "add-purple-bg-to-icons.js",
+  "scripts": {
+    "process-icons": "node add-purple-bg-to-icons.js",
+    "replace-icons": "node replace-with-purple-icons.js",
+    "restore-icons": "node restore-original-icons.js"
+  },
+  "dependencies": {
+    "sharp": "^0.32.1"
+  }
+} 
