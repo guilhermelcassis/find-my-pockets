@@ -28,7 +28,7 @@ export interface Database {
           city: string;
           state: string;
           country: string;
-          instagram: string;
+          instagram?: string;
           leader: Leader;
           leader_id?: string;
           coordinates: Coordinates;
@@ -45,7 +45,7 @@ export interface Database {
           city: string;
           state: string;
           country: string;
-          instagram: string;
+          instagram?: string;
           leader: Leader;
           leader_id?: string;
           coordinates: Coordinates;
