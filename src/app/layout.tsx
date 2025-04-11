@@ -17,13 +17,20 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Dunamis Pockets",
   description: "Encontre Dunamis Pockets pelo mundo",
+  manifest: "/manifest.json",
+  themeColor: "#FF6242",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Find My Pockets",
+  },
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
       { url: "/FMP_Laranja_Centered.svg", type: "image/svg+xml" },
-      { url: "/icon.png", type: "image/png", sizes: "192x192" }
+      { url: "/icons/icon-192x192.png", type: "image/png", sizes: "192x192" }
     ],
-    apple: { url: "/apple-icon.png", type: "image/png" },
+    apple: { url: "/icons/icon-192x192.png", type: "image/png" },
   }
 };
 
@@ -37,8 +44,14 @@ export default function RootLayout({
       <head>
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="icon" href="/FMP_Laranja_Centered.svg" type="image/svg+xml" />
-        <link rel="icon" href="/icon.png" type="image/png" sizes="192x192" />
-        <link rel="apple-touch-icon" href="/apple-icon.png" />
+        <link rel="icon" href="/icons/icon-192x192.png" type="image/png" sizes="192x192" />
+        <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#FF6242" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="Find My Pockets" />
+        <meta name="application-name" content="Find My Pockets" />
         <link rel="stylesheet" href="/pockets-logo-style.css" />
         <Script id="google-maps-guard" strategy="beforeInteractive">
           {`

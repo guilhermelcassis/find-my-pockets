@@ -78,6 +78,16 @@ interface SuggestionItem {
   count: number;
 }
 
+// PWA Installation type
+interface BeforeInstallPromptEvent extends Event {
+  readonly platforms: string[];
+  readonly userChoice: Promise<{
+    outcome: 'accepted' | 'dismissed';
+    platform: string;
+  }>;
+  prompt(): Promise<void>;
+}
+
 export default function Home() {
   // Shared state that remains consistent between server and client
   const [searchTerm, setSearchTerm] = useState('');
@@ -95,6 +105,11 @@ export default function Home() {
   const [isTyping, setIsTyping] = useState(false);
   const [searchType, setSearchType] = useState<'university' | 'city' | 'state' | 'country' | null>(null);
   const [filteredGroups, setFilteredGroups] = useState<Group[]>([]);
+  
+  // PWA installation state
+  const [isInstallable, setIsInstallable] = useState(false);
+  const [isIOSDevice, setIsIOSDevice] = useState(false);
+  const deferredPromptRef = useRef<BeforeInstallPromptEvent | null>(null);
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -137,6 +152,99 @@ export default function Home() {
       }
     };
   }, []);
+
+  // Add PWA installation event handler
+  useEffect(() => {
+    if (!isClient) return;
+    
+    // Check if this is an iOS device
+    const checkIOSDevice = () => {
+      const userAgent = navigator.userAgent || navigator.vendor;
+      return /iPad|iPhone|iPod/.test(userAgent) && !(window as any).MSStream;
+    };
+    
+    setIsIOSDevice(checkIOSDevice());
+    
+    // Listen for beforeinstallprompt event
+    const handleBeforeInstallPrompt = (e: Event) => {
+      // Prevent Chrome 67 and earlier from automatically showing the prompt
+      e.preventDefault();
+      
+      // Store the event for later use
+      deferredPromptRef.current = e as BeforeInstallPromptEvent;
+      
+      // Show the install button
+      setIsInstallable(true);
+    };
+    
+    // Check if the user has already installed the PWA
+    const checkAppInstalled = () => {
+      // For iOS, we have to rely on heuristics
+      if (checkIOSDevice()) {
+        // If it's in standalone mode (already installed)
+        if (window.matchMedia('(display-mode: standalone)').matches) {
+          setIsInstallable(false);
+        } else {
+          // On iOS, we'll show instructions instead
+          setIsInstallable(true);
+        }
+        return;
+      }
+      
+      // For other browsers, we listen for the beforeinstallprompt event
+      window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      
+      // If the app is already installed, the event won't fire, and we don't need to show the button
+      window.addEventListener('appinstalled', () => {
+        setIsInstallable(false);
+        deferredPromptRef.current = null;
+      });
+    };
+    
+    checkAppInstalled();
+    
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, [isClient]);
+  
+  // Function to handle PWA installation
+  const handleInstallClick = async () => {
+    if (!deferredPromptRef.current && !isIOSDevice) {
+      return;
+    }
+    
+    if (isIOSDevice) {
+      // For iOS, we show an alert with installation instructions
+      alert(
+        'Para instalar este app no seu iPhone/iPad:\n\n' +
+        '1. Toque no ícone de compartilhamento (o quadrado com a seta para cima)\n' +
+        '2. Role para baixo e toque em "Adicionar à Tela de Início"\n' +
+        '3. Toque em "Adicionar" no canto superior direito'
+      );
+      return;
+    }
+    
+    try {
+      // Show the installation prompt
+      await deferredPromptRef.current?.prompt();
+      
+      // Wait for the user to respond to the prompt
+      const choiceResult = await deferredPromptRef.current?.userChoice;
+      
+      if (choiceResult && choiceResult.outcome === 'accepted') {
+        console.log('User accepted the install prompt');
+        setIsInstallable(false);
+      } else {
+        console.log('User dismissed the install prompt');
+      }
+      
+      // Clear the saved prompt as it can only be used once
+      deferredPromptRef.current = null;
+    } catch (error) {
+      console.error('Error during PWA installation:', error);
+    }
+  };
 
   // Consolidate all client-side dom manipulations into a single useEffect
   useEffect(() => {
@@ -1265,6 +1373,31 @@ export default function Home() {
         
         <div className="max-w-7xl mx-auto w-full px-4 md:px-6 pt-20 pb-14 md:py-20 relative z-10">
           <div className="max-w-3xl mx-auto text-center mb-10">
+            
+            {/* PWA Install Button - Only visible when app is installable */}
+            {isClient && isInstallable && (
+              <div className="mt-6 mb-8 flex justify-center">
+                <button
+                  onClick={handleInstallClick}
+                  className="flex items-center gap-2 px-5 py-3 bg-white/10 backdrop-blur-md rounded-xl border border-white/20 text-white shadow-lg hover:bg-white/15 transition-all duration-300 group"
+                >
+                  <span className="flex items-center justify-center w-8 h-8 bg-gradient-to-br from-[#FF6242] to-[#FF7D67] rounded-lg shadow-inner">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                  </span>
+                  <span className="font-medium">
+                    {isIOSDevice 
+                      ? 'Instalar app no iPhone/iPad' 
+                      : 'Instalar app no seu dispositivo'}
+                  </span>
+                  <span className="ml-1 text-xs py-1 px-2 bg-white/20 rounded-full group-hover:bg-white/25 transition-colors">
+                    Grátis
+                  </span>
+                </button>
+              </div>
+            )}
+            
             {/* Logo Section - Removed and repositioned to top corners */}
             <div className="inline-flex items-center justify-center mb-6 bg-white/5 backdrop-blur-sm px-4 py-1.5 rounded-full border border-white/10 shadow-sm mt-6 sm:mt-0">
               <span className="h-2 w-2 bg-primary rounded-full mr-2"></span>
@@ -1280,6 +1413,8 @@ export default function Home() {
                 </span>
               </div>
             </h1>
+
+            
           </div>
 
           <div className="max-w-2xl mx-auto">
