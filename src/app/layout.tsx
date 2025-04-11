@@ -53,6 +53,7 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-title" content="Find My Pockets" />
         <meta name="application-name" content="Find My Pockets" />
         <link rel="stylesheet" href="/pockets-logo-style.css" />
+        <link rel="stylesheet" href="/ios-install-guide.css" />
         <Script id="google-maps-guard" strategy="beforeInteractive">
           {`
             // Prevent multiple initializations of Google Maps

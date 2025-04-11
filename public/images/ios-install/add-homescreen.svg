@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80" width="200" height="80">
+  <!-- iOS-style Add to Home Screen icon -->
+  <rect x="10" y="10" width="180" height="60" rx="5" ry="5" fill="#f2f2f7" />
+  <circle cx="35" cy="40" r="15" fill="#007AFF" />
+  <path d="M35 30 L35 50 M25 40 L45 40" stroke="white" stroke-width="3" />
+  <text x="60" y="45" font-family="system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" fill="#000000">Adicionar à Tela de Início</text>
+</svg> 
