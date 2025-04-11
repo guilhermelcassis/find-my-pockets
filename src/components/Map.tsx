@@ -1858,10 +1858,12 @@ const Map = forwardRef<MapRef, MapProps>(({
       {/* Render the CustomInfoWindow when a group is selected */}
       {map && selectedGroup && selectedPosition && (
         <CustomInfoWindow
+          key={selectedGroup.id} // Add a key to force re-render when the group changes
           group={selectedGroup}
           map={map}
           position={selectedPosition}
           onClose={handleInfoWindowClose}
+          allGroups={groups} // Pass all groups to the CustomInfoWindow
         />
       )}
       
