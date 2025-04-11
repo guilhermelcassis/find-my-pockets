@@ -1165,7 +1165,7 @@ export default function Home() {
 
   // Update the return statement for consistent rendering
   return (
-    <main className={`min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 flex flex-col ${plusJakarta.variable} ${spaceGrotesk.variable} ${inter.variable} ${poppins.variable}`}>
+    <main className={`min-h-screen bg-gradient-to-b from-[#fff8f6] to-[#fff0eb] flex flex-col ${plusJakarta.variable} ${spaceGrotesk.variable} ${inter.variable} ${poppins.variable}`}>
       {/* Use stable gradient classes that are consistent between server/client */}
       <div className="bg-dunamis-gradient text-white relative overflow-hidden">
         {/* Enhanced decorative elements with more depth and visual interest */}
@@ -1499,7 +1499,7 @@ export default function Home() {
             {/* Mobile View Controls - only show on client */}
             {isClient && (
               <div className="md:hidden flex justify-center mb-6">
-                <div className="inline-flex rounded-xl bg-white/80 backdrop-blur-sm p-1 shadow-md border border-gray-100">
+                <div className="inline-flex rounded-xl bg-white/80 backdrop-blur-sm p-1 shadow-md border border-[#ffd0c2]">
                   <button
                     onClick={() => setMobileView('map')}
                     className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 ${
@@ -1536,7 +1536,7 @@ export default function Home() {
 
             {/* Results Summary Bar */}
             <div className="mb-6">
-              <div className="bg-white/70 backdrop-blur-sm rounded-xl p-4 shadow-sm border border-gray-100 flex items-center justify-between">
+              <div className="bg-white/70 backdrop-blur-sm rounded-xl p-4 shadow-sm border border-[#ffd0c2] flex items-center justify-between">
                 <div className="flex items-center">
                   <span className="text-sm font-medium text-gray-800">
                     {searchResults.length === 0 ? (
@@ -1576,9 +1576,9 @@ export default function Home() {
                         selectedGroupId={selectedGroupId}
                       />
                     ) : (
-                      <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-100 p-10 text-center">
-                        <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-5">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-[#ffd0c2] p-10 text-center">
+                        <div className="w-16 h-16 bg-[#fff0eb] rounded-full flex items-center justify-center mx-auto mb-5">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-[#ff7a59]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                           </svg>
                         </div>
@@ -1594,7 +1594,7 @@ export default function Home() {
               <div className={`${(isClient && (mobileView === 'map' || !checkMobileView())) ? 'block' : 'hidden'} md:block order-1 md:order-2 h-[65vh] md:h-[75vh] relative`} ref={mapContainerRef}>
                 {/* Only render on client to avoid hydration issues */}
                 {isClient && (
-                  <div className="h-full rounded-2xl overflow-hidden shadow-xl border border-gray-200 bg-white/70 backdrop-blur-sm">
+                  <div className="h-full rounded-2xl overflow-hidden shadow-xl border border-[#ffd0c2] bg-white/70 backdrop-blur-sm">
                     <MapComponent
                       ref={mapRef}
                       groups={searchResults.length > 0 ? searchResults : allGroups}

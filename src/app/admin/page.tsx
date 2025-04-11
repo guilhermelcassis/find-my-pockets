@@ -865,8 +865,11 @@ const AdminPage = () => {
                 src={`https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places&callback=initGoogleMaps`}
             />
             
-            {/* Full page container with modern gradient background */}
-            <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-50">
+            {/* Full page overlay with light orange background that covers everything */}
+            <div className="fixed inset-0 bg-orange-50 z-[-1]"></div>
+            
+            {/* Page content container */}
+            <div className="min-h-screen">
                 <div className="container mx-auto max-w-4xl px-6 py-8">
                     {/* Page header with simplified design */}
                     <div className="mb-8">
