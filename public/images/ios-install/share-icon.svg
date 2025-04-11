@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
-  <!-- iOS-style share icon with square and arrow -->
-  <rect x="30" y="50" width="40" height="30" rx="5" ry="5" fill="#007AFF" />
-  <path d="M50 20 L65 35 L35 35 Z" fill="#007AFF" />
-  <rect x="47" y="30" width="6" height="30" fill="#007AFF" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 60" width="60" height="60">
+  <!-- iOS-style share icon - simplified -->
+  <rect x="18" y="30" width="24" height="18" rx="4" ry="4" fill="#007AFF" />
+  <path d="M30 12 L38 20 L22 20 Z" fill="#007AFF" />
+  <rect x="28" y="18" width="4" height="18" fill="#007AFF" />
 </svg> 

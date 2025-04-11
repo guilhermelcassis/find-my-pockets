@@ -1279,95 +1279,84 @@ export default function Home() {
     <main className={`min-h-screen bg-gradient-to-b from-[#fff8f6] to-[#fff0eb] flex flex-col ${plusJakarta.variable} ${spaceGrotesk.variable} ${inter.variable} ${poppins.variable} relative`}>
       {/* iOS Installation Modal */}
       {showIOSInstallModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden my-4 ios-install-modal">
-            <div className="p-5 bg-gradient-to-r from-[#FF6242] to-[#FF7D67] text-white">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-2 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl max-w-[300px] w-full overflow-hidden my-2 ios-install-modal">
+            <div className="p-2.5 bg-gradient-to-r from-[#FF6242] to-[#FF7D67] text-white">
               <div className="flex justify-between items-center">
-                <h3 className="text-xl font-semibold">Instale o Find My Pockets</h3>
+                <h3 className="text-sm font-semibold">Instalar Find My Pockets</h3>
                 <button onClick={closeIOSInstallModal} className="p-1 rounded-full hover:bg-white/20 transition-colors">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
             </div>
             
-            <div className="p-6">
-              <p className="text-gray-700 mb-6">
-                O iOS não permite instalar apps automaticamente. Siga estas etapas para adicionar o Find My Pockets à sua tela inicial:
+            <div className="p-2.5 overflow-y-auto max-h-[60vh]">
+              <p className="text-xs text-gray-700 mb-2">
+                Siga 3 etapas para instalar o app no iOS:
               </p>
               
-              <div className="space-y-8">
+              <div className="space-y-2">
                 {/* Step 1 */}
-                <div className="flex flex-col ios-install-step">
-                  <div className="flex items-center mb-3">
-                    <div className="flex-shrink-0 bg-[#FF6242] w-8 h-8 rounded-full flex items-center justify-center text-white font-bold mr-3">
+                <div className="flex flex-col ios-install-step bg-gray-50 rounded-lg p-1.5">
+                  <div className="flex items-center mb-1">
+                    <div className="flex-shrink-0 bg-[#FF6242] w-5 h-5 rounded-full flex items-center justify-center text-white font-bold mr-1.5 text-xs">
                       1
                     </div>
-                    <p className="text-gray-700 font-medium">Toque no botão de compartilhamento</p>
+                    <p className="text-xs text-gray-700 font-medium">Toque no botão compartilhar</p>
                   </div>
-                  <div className="bg-gray-100 p-4 rounded-lg flex items-center justify-center">
-                    <div className="w-full max-w-[200px] flex flex-col items-center">
-                      <div className="w-16 h-16 bg-[#f2f2f7] rounded-xl p-2 mb-2 flex items-center justify-center">
-                        <img src="/images/ios-install/share-icon.svg" alt="Botão de compartilhamento" className="w-10 h-10" />
-                      </div>
-                      <div className="w-full h-1 bg-gray-300 rounded-full mt-2 mb-3"></div>
-                      <div className="text-sm text-gray-500 text-center">
-                        Localizado na parte inferior do navegador Safari
-                      </div>
+                  <div className="flex justify-center">
+                    <div className="ios-share-icon h-8 w-8 bg-[#f2f2f7] rounded-lg p-1 flex items-center justify-center">
+                      <img src="/images/ios-install/share-icon.svg" alt="Compartilhar" className="w-6 h-6" />
                     </div>
                   </div>
                 </div>
                 
                 {/* Step 2 */}
-                <div className="flex flex-col">
-                  <div className="flex items-center mb-3">
-                    <div className="flex-shrink-0 bg-[#FF6242] w-8 h-8 rounded-full flex items-center justify-center text-white font-bold mr-3">
+                <div className="flex flex-col ios-install-step bg-gray-50 rounded-lg p-1.5">
+                  <div className="flex items-center mb-1">
+                    <div className="flex-shrink-0 bg-[#FF6242] w-5 h-5 rounded-full flex items-center justify-center text-white font-bold mr-1.5 text-xs">
                       2
                     </div>
-                    <p className="text-gray-700 font-medium">Role para baixo e toque em "Adicionar à Tela de Início"</p>
+                    <p className="text-xs text-gray-700 font-medium">Toque em "Adicionar à Tela"</p>
                   </div>
-                  <div className="bg-gray-100 p-4 rounded-lg flex items-center justify-center">
-                    <div className="bg-[#f2f2f7] rounded-xl p-4 w-full max-w-[250px] flex flex-col items-center">
-                      <img src="/images/ios-install/add-homescreen.svg" alt="Opção Adicionar à Tela de Início" className="w-full" />
-                      <div className="w-full h-1 bg-gray-300 rounded-full mt-4"></div>
-                    </div>
+                  <div className="flex justify-center ios-homescreen-option">
+                    <img src="/images/ios-install/add-homescreen.svg" alt="Adicionar à Tela" className="w-32 h-auto" />
                   </div>
                 </div>
                 
                 {/* Step 3 */}
-                <div className="flex flex-col">
-                  <div className="flex items-center mb-3">
-                    <div className="flex-shrink-0 bg-[#FF6242] w-8 h-8 rounded-full flex items-center justify-center text-white font-bold mr-3">
+                <div className="flex flex-col ios-install-step bg-gray-50 rounded-lg p-1.5">
+                  <div className="flex items-center mb-1">
+                    <div className="flex-shrink-0 bg-[#FF6242] w-5 h-5 rounded-full flex items-center justify-center text-white font-bold mr-1.5 text-xs">
                       3
                     </div>
-                    <p className="text-gray-700 font-medium">Toque em "Adicionar" no canto superior direito</p>
+                    <p className="text-xs text-gray-700 font-medium">Toque em "Adicionar"</p>
                   </div>
-                  <div className="bg-gray-100 p-4 rounded-lg flex flex-col items-center justify-center">
-                    <div className="bg-[#f2f2f7] rounded-t-xl p-4 w-full max-w-[250px] flex flex-col items-center">
-                      <div className="mb-4 w-16 h-16 rounded-xl bg-[#FF6242] flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className="flex justify-center ios-add-button">
+                    <div className="flex flex-col items-center">
+                      <div className="rounded-lg bg-[#FF6242] w-8 h-8 flex items-center justify-center mb-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                         </svg>
                       </div>
-                      <p className="text-center font-medium mb-2">Find My Pockets</p>
-                      <p className="text-center text-sm text-gray-500 mb-2">findmypockets.app</p>
+                      <img src="/images/ios-install/add-button.svg" alt="Botão Adicionar" className="w-28 h-auto" />
                     </div>
-                    <img src="/images/ios-install/add-button.svg" alt="Botão Adicionar" className="w-full max-w-[250px]" />
                   </div>
                 </div>
               </div>
               
-              <div className="mt-8 pt-4 border-t border-gray-200">
-                <p className="text-gray-500 text-sm mb-4">
-                  Depois de instalado, o app estará disponível na sua tela inicial e você poderá acessá-lo a qualquer momento, mesmo offline.
-                </p>
+              <div className="mt-2 pt-2 border-t border-gray-200">
                 <button 
                   onClick={closeIOSInstallModal}
-                  className="w-full py-3 px-4 bg-gradient-to-r from-[#FF6242] to-[#FF7D67] text-white font-medium rounded-xl shadow-md hover:shadow-lg transition-shadow"
+                  className="w-full py-1.5 px-3 bg-gradient-to-r from-[#FF6242] to-[#FF7D67] text-white text-xs font-medium rounded-lg shadow-md hover:shadow-lg transition-shadow"
                 >
                   Entendi!
                 </button>
+                <p className="text-gray-500 text-[10px] mt-1.5 text-center">
+                  Após instalado, o app estará na tela inicial.
+                </p>
               </div>
             </div>
           </div>

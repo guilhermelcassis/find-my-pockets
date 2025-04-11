@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 50" width="200" height="50">
-  <!-- iOS-style Add button in dialog -->
-  <rect x="0" y="0" width="200" height="50" rx="0" ry="0" fill="#f9f9f9" />
-  <text x="150" y="30" font-family="system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="600" fill="#007AFF" text-anchor="middle">Adicionar</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 36" width="100" height="36">
+  <!-- iOS-style Add button - simplified -->
+  <rect x="0" y="0" width="100" height="36" rx="0" ry="0" fill="#f9f9f9" />
+  <text x="50" y="22" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="500" fill="#007AFF" text-anchor="middle">Adicionar</text>
 </svg> 
