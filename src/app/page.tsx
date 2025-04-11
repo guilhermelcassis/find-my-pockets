@@ -109,7 +109,6 @@ export default function Home() {
   // PWA installation state
   const [isInstallable, setIsInstallable] = useState(false);
   const [isIOSDevice, setIsIOSDevice] = useState(false);
-  const [showIOSInstallModal, setShowIOSInstallModal] = useState(false);
   const deferredPromptRef = useRef<BeforeInstallPromptEvent | null>(null);
   
   // Pagination state
@@ -216,8 +215,13 @@ export default function Home() {
     }
     
     if (isIOSDevice) {
-      // For iOS, show a visual modal with instructions instead of an alert
-      setShowIOSInstallModal(true);
+      // For iOS, we show an alert with installation instructions
+      alert(
+        'Para instalar este app no seu iPhone/iPad:\n\n' +
+        '1. Toque no ícone de compartilhamento (o quadrado com a seta para cima)\n' +
+        '2. Role para baixo e toque em "Adicionar à Tela de Início"\n' +
+        '3. Toque em "Adicionar" no canto superior direito'
+      );
       return;
     }
     
@@ -240,11 +244,6 @@ export default function Home() {
     } catch (error) {
       console.error('Error during PWA installation:', error);
     }
-  };
-
-  // Function to close the iOS installation modal
-  const closeIOSInstallModal = () => {
-    setShowIOSInstallModal(false);
   };
 
   // Consolidate all client-side dom manipulations into a single useEffect
@@ -1277,92 +1276,6 @@ export default function Home() {
   // Update the return statement for consistent rendering
   return (
     <main className={`min-h-screen bg-gradient-to-b from-[#fff8f6] to-[#fff0eb] flex flex-col ${plusJakarta.variable} ${spaceGrotesk.variable} ${inter.variable} ${poppins.variable} relative`}>
-      {/* iOS Installation Modal */}
-      {showIOSInstallModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-2 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-xl max-w-[300px] w-full overflow-hidden my-2 ios-install-modal">
-            <div className="p-2.5 bg-gradient-to-r from-[#FF6242] to-[#FF7D67] text-white">
-              <div className="flex justify-between items-center">
-                <h3 className="text-sm font-semibold">Instalar Find My Pockets</h3>
-                <button onClick={closeIOSInstallModal} className="p-1 rounded-full hover:bg-white/20 transition-colors">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-            
-            <div className="p-2.5 overflow-y-auto max-h-[60vh]">
-              <p className="text-xs text-gray-700 mb-2">
-                Siga 3 etapas para instalar o app no iOS:
-              </p>
-              
-              <div className="space-y-2">
-                {/* Step 1 */}
-                <div className="flex flex-col ios-install-step bg-gray-50 rounded-lg p-1.5">
-                  <div className="flex items-center mb-1">
-                    <div className="flex-shrink-0 bg-[#FF6242] w-5 h-5 rounded-full flex items-center justify-center text-white font-bold mr-1.5 text-xs">
-                      1
-                    </div>
-                    <p className="text-xs text-gray-700 font-medium">Toque no botão compartilhar</p>
-                  </div>
-                  <div className="flex justify-center">
-                    <div className="ios-share-icon h-8 w-8 bg-[#f2f2f7] rounded-lg p-1 flex items-center justify-center">
-                      <img src="/images/ios-install/share-icon.svg" alt="Compartilhar" className="w-6 h-6" />
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Step 2 */}
-                <div className="flex flex-col ios-install-step bg-gray-50 rounded-lg p-1.5">
-                  <div className="flex items-center mb-1">
-                    <div className="flex-shrink-0 bg-[#FF6242] w-5 h-5 rounded-full flex items-center justify-center text-white font-bold mr-1.5 text-xs">
-                      2
-                    </div>
-                    <p className="text-xs text-gray-700 font-medium">Toque em "Adicionar à Tela"</p>
-                  </div>
-                  <div className="flex justify-center ios-homescreen-option">
-                    <img src="/images/ios-install/add-homescreen.svg" alt="Adicionar à Tela" className="w-32 h-auto" />
-                  </div>
-                </div>
-                
-                {/* Step 3 */}
-                <div className="flex flex-col ios-install-step bg-gray-50 rounded-lg p-1.5">
-                  <div className="flex items-center mb-1">
-                    <div className="flex-shrink-0 bg-[#FF6242] w-5 h-5 rounded-full flex items-center justify-center text-white font-bold mr-1.5 text-xs">
-                      3
-                    </div>
-                    <p className="text-xs text-gray-700 font-medium">Toque em "Adicionar"</p>
-                  </div>
-                  <div className="flex justify-center ios-add-button">
-                    <div className="flex flex-col items-center">
-                      <div className="rounded-lg bg-[#FF6242] w-8 h-8 flex items-center justify-center mb-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                        </svg>
-                      </div>
-                      <img src="/images/ios-install/add-button.svg" alt="Botão Adicionar" className="w-28 h-auto" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="mt-2 pt-2 border-t border-gray-200">
-                <button 
-                  onClick={closeIOSInstallModal}
-                  className="w-full py-1.5 px-3 bg-gradient-to-r from-[#FF6242] to-[#FF7D67] text-white text-xs font-medium rounded-lg shadow-md hover:shadow-lg transition-shadow"
-                >
-                  Entendi!
-                </button>
-                <p className="text-gray-500 text-[10px] mt-1.5 text-center">
-                  Após instalado, o app estará na tela inicial.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      
       {/* Absolutely positioned logos in the top corners - improved responsive sizing */}
       <div className="absolute top-4 left-4 md:top-6 md:left-6 z-20">
         {/* Find My Pockets Logo - Left top corner */}
@@ -1486,6 +1399,10 @@ export default function Home() {
             )}
             
             {/* Logo Section - Removed and repositioned to top corners */}
+            <div className="inline-flex items-center justify-center mb-6 bg-white/5 backdrop-blur-sm px-4 py-1.5 rounded-full border border-white/10 shadow-sm mt-6 sm:mt-0">
+              <span className="h-2 w-2 bg-primary rounded-full mr-2"></span>
+              <span className="text-xs text-white font-medium tracking-wide uppercase">Encontre um polo de avivamento na sua universidade</span>
+            </div>
             <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold mb-5 tracking-tight font-space-grotesk leading-none text-center">
               {/* Mobile: Two lines, Desktop: Single line */}
               <div className="md:whitespace-nowrap">
@@ -1722,6 +1639,22 @@ export default function Home() {
                     </svg>
                     Mostrar todos os Pockets
                   </button>
+                  
+                  {['Brasil', 'São Paulo', 'Rio de Janeiro', 'USP'].map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      onClick={(e: React.MouseEvent) => {
+                        setSearchTerm(suggestion);
+                        // Explicitly set searchType to null and pass null as directType
+                        setSearchType(null);
+                        performSearch(suggestion, e as unknown as React.FormEvent, true, null);
+                      }}
+                      className="px-4 py-2 bg-white/10 backdrop-blur-sm text-white rounded-full text-sm hover:bg-white/20 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-white/30 border border-white/10 shadow-md"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
                 </div>
               </form>
             ) : (
