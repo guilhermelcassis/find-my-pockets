@@ -7,8 +7,8 @@ import CustomInfoWindow from './CustomInfoWindow';
 // Export interface to define the map ref methods
 export interface MapRef {
   fitBoundsToMarkers: () => void;
-  showGroupDetails: (groupId: string) => void;
-  zoomToGroup: (groupId: string) => void;
+  showGroupDetails: (groupId: string, permanent?: boolean) => void;
+  zoomToGroup: (groupId: string, showPopup?: boolean) => void;
   clearMapClicks: () => void;
   getUserLocation: () => Promise<void>;
 }
@@ -1037,24 +1037,32 @@ const Map = forwardRef<MapRef, MapProps>(({
             marker.addListener('click', () => {
               console.log('Advanced marker clicked for group:', group.id, group.university);
               
-              // Add visual feedback - temporarily highlight the marker
-              if (marker.content) {
-                // Cast content to HTMLElement to use querySelector
-                const content = marker.content as HTMLElement;
-                const markerEl = content.querySelector('.pocket-marker') as HTMLElement;
-                if (markerEl) {
-                  // Save original transform
-                  const originalTransform = markerEl.style.transform;
-                  const originalShadow = markerEl.style.boxShadow;
+              // Find the marker element to add a visual effect
+              const marker = markersRef.current[group.id];
+              if (marker) {
+                // Check if this is an AdvancedMarkerElement with content property
+                if ('content' in marker && marker.content) {
+                  // Apply a subtle highlight effect
+                  const content = marker.content as HTMLElement;
+                  const markerEl = content.querySelector('.pocket-marker') as HTMLElement;
+                  if (markerEl) {
+                    // Apply a subtle pulse effect
+                    markerEl.style.transform = 'rotate(-45deg) scale(1.2)';
+                    markerEl.style.boxShadow = '0 6px 16px rgba(37, 99, 235, 0.8)';
+                    
+                    // Return to normal after a short animation
+                    setTimeout(() => {
+                      markerEl.style.transform = 'rotate(-45deg) scale(1)';
+                      markerEl.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
+                    }, 300);
+                  }
+                } else if (marker instanceof google.maps.Marker) {
+                  // For legacy markers, use a different animation
+                  marker.setAnimation(google.maps.Animation.BOUNCE);
                   
-                  // Apply highlight effect
-                  markerEl.style.transform = 'rotate(-45deg) scale(1.2)';
-                  markerEl.style.boxShadow = '0 6px 16px rgba(37, 99, 235, 0.8)';
-                  
-                  // Reset after animation
+                  // Stop the animation after a short time
                   setTimeout(() => {
-                    markerEl.style.transform = originalTransform;
-                    markerEl.style.boxShadow = originalShadow;
+                    marker.setAnimation(null);
                   }, 300);
                 }
               }
@@ -1519,34 +1527,159 @@ const Map = forwardRef<MapRef, MapProps>(({
   // Expose methods to parent component
   useImperativeHandle(ref, () => ({
     fitBoundsToMarkers,
-    showGroupDetails: (groupId: string) => {
+    showGroupDetails: (groupId: string, permanent?: boolean) => {
       // Find the group
       const group = groups.find(g => g.id === groupId);
       if (!group || !map) {
-        console.log('Cannot show details: map not initialized or group not found');
+        console.log('Cannot show group details: map not initialized or group not found');
         return;
       }
-      
-      // Find the marker for this group
-      const marker = markersRef.current[groupId];
-      if (!marker) {
-        console.log('Cannot show details: marker not found for group', groupId);
+
+      // Check that coordinates exist
+      if (!group.coordinates || !group.coordinates.latitude || !group.coordinates.longitude) {
+        console.log('Cannot show group details: invalid coordinates');
         return;
       }
+
+      // Check if we're already showing the same group
+      const isSameGroup = selectedGroup && selectedGroup.id === groupId;
+      if (isSameGroup) {
+        console.log('Already showing details for this group, just ensuring visibility');
+        return;
+      }
+
+      // Check if we're zooming to a group in the same location as the currently selected group
+      const isSameLocation = selectedGroup && 
+        selectedGroup.university === group.university && 
+        Math.abs(selectedGroup.coordinates.latitude - group.coordinates.latitude) < 0.0001 &&
+        Math.abs(selectedGroup.coordinates.longitude - group.coordinates.longitude) < 0.0001;
+
+      // Special handling for smooth transitions between markers at the same university
+      if (isSameLocation) {
+        console.log('Smooth transition between groups at the same location');
+        
+        // Create new position object (even though it's the same coordinates)
+        const position = {
+          lat: group.coordinates.latitude,
+          lng: group.coordinates.longitude
+        };
+
+        // Find the marker element to add a visual indication
+        const marker = markersRef.current[groupId];
+        if (marker) {
+          // Check if this is an AdvancedMarkerElement with content property
+          if ('content' in marker && marker.content) {
+            // Apply a subtle highlight effect
+            const content = marker.content as HTMLElement;
+            const markerEl = content.querySelector('.pocket-marker') as HTMLElement;
+            if (markerEl) {
+              // Apply a more subtle pulse animation for markers at same university
+              markerEl.style.transition = 'all 0.35s cubic-bezier(0.4, 0, 0.2, 1)';
+              markerEl.style.transform = 'rotate(-45deg) scale(1.15)';
+              markerEl.style.boxShadow = '0 4px 12px rgba(37, 99, 235, 0.7)';
+              markerEl.style.borderColor = '#3b82f6';
+              
+              // Return to normal after animation completes
+              setTimeout(() => {
+                markerEl.style.transform = 'rotate(-45deg) scale(1)';
+                markerEl.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
+                markerEl.style.borderColor = '#1e40af';
+              }, 450);
+            }
+          }
+        }
+
+        // Pre-calculate a smoother transition duration based on group content similarity
+        const transitionDuration = 250; // ms
+
+        // Clear any existing info window first if needed
+        if (selectedGroup) {
+          // Don't fully hide the previous info window to avoid flickering
+          // Just prepare for the transition to the new content
+          console.log(`Preparing transition from ${selectedGroup.id} to ${group.id}`);
+        }
+
+        // Update internal state after a tiny delay to allow for proper transition sequencing
+        setTimeout(() => {
+          setSelectedGroup(group);
+          // Keep current map view position to avoid any jittering
+        }, 10);
+        
+        // Show the info window after a slight delay for smoother transition
+        setTimeout(() => {
+          // Close any existing info window first to prevent stacking
+          if (infoWindow) {
+            infoWindow.close();
+          }
+          
+          // Position info window slightly above marker for better visibility
+          const windowPosition = {
+            lat: position.lat,
+            lng: position.lng
+          };
+          
+          // Create a new info window with updated content using CustomInfoWindow
+          if (map) {
+            // Set the selected group and position states, which will trigger
+            // CustomInfoWindow creation via useEffect in the component
+            setSelectedGroup(group);
+            setSelectedPosition(windowPosition);
+            
+            // Highlight the selected marker
+            // Note: We're accessing the marker directly rather than using a separate function
+            if (marker) {
+              // Clear previous active marker state if any
+              Object.values(markersRef.current).forEach(m => {
+                if ('content' in m && m.content) {
+                  const content = m.content as HTMLElement;
+                  const markerElement = content.querySelector('.pocket-marker') as HTMLElement;
+                  if (markerElement) {
+                    markerElement.classList.remove('active');
+                  }
+                }
+              });
+              
+              // Set current marker as active
+              if ('content' in marker && marker.content) {
+                const content = marker.content as HTMLElement;
+                const markerElement = content.querySelector('.pocket-marker') as HTMLElement;
+                if (markerElement) {
+                  markerElement.classList.add('active');
+                }
+              }
+            }
+          }
+          
+          // Add to permanent markers if needed
+          if (permanent) {
+            // Add to the list of permanently shown markers
+            markerClickIdsRef.current.add(group.id);
+          }
+        }, 50);
+
+        return;
+      } else {
+        // Standard handling for different locations
+        // Set the flag to indicate this marker was selected from the map
+        selectedFromMapRef.current = true;
+        
+        // Add this group ID to the markers that have been clicked on the map
+        markerClickIdsRef.current.add(groupId);
+        
+        // Update the selected group state to show info window
+        setSelectedGroup(group);
+        setSelectedPosition({
+          lat: group.coordinates.latitude,
+          lng: group.coordinates.longitude
+        });
+      }
       
-      // Set flags to indicate this was NOT selected from the map
-      selectedFromMapRef.current = false;
-      lastCenteredGroupIdRef.current = groupId; // Prevent re-centering on future selectedGroupId updates
-      
-      // If this is called from the list, remove the ID from the set of map-clicked markers
-      markerClickIdsRef.current.delete(groupId);
-      
-      // Set selected group for InfoWindow
-      setSelectedGroup(group);
-      setSelectedPosition({
-        lat: group.coordinates.latitude,
-        lng: group.coordinates.longitude
-      });
+      // If permanent flag is set, mark this marker for persistent display
+      if (permanent) {
+        // Add to a persistent display set or take other action to ensure display persists
+        console.log(`Marking group ${groupId} for permanent display`);
+        // This is handled by not closing the info window automatically
+      }
       
       // Notify parent component about the marker click (without zooming)
       if (onMarkerClick) {
@@ -1555,7 +1688,7 @@ const Map = forwardRef<MapRef, MapProps>(({
       
       console.log(`Showing details for group ${groupId} without zooming`);
     },
-    zoomToGroup: (groupId: string) => {
+    zoomToGroup: (groupId: string, showPopup?: boolean) => {
       // Find the group
       const group = groups.find(g => g.id === groupId);
       if (!group || !map) {
@@ -1569,6 +1702,12 @@ const Map = forwardRef<MapRef, MapProps>(({
         return;
       }
 
+      // Check if we're zooming to a group in the same location as the currently selected group
+      const isSameLocation = selectedGroup && 
+        selectedGroup.university === group.university && 
+        Math.abs(selectedGroup.coordinates.latitude - group.coordinates.latitude) < 0.0001 &&
+        Math.abs(selectedGroup.coordinates.longitude - group.coordinates.longitude) < 0.0001;
+      
       // Flag that this is a deliberate zoom action (not from map click)
       selectedFromMapRef.current = false;
       
@@ -1584,10 +1723,49 @@ const Map = forwardRef<MapRef, MapProps>(({
         lng: group.coordinates.longitude
       };
 
-      // Animate zoom to position
-      console.log(`Zooming to group ${groupId}: ${group.university}`);
-      map.panTo(position);
-      map.setZoom(15); // Set appropriate zoom level
+      // Use different animation based on whether we're at the same location
+      if (isSameLocation) {
+        console.log(`Gentle pan to group ${groupId} at same location: ${group.university}`);
+        
+        // Use a gentle pan with smooth animation
+        map.panTo(position);
+        
+        // No need to change zoom as we're already at the right level
+        
+        // Apply a subtle highlight to the marker
+        const marker = markersRef.current[groupId];
+        if (marker) {
+          if ('content' in marker && marker.content) {
+            // For advanced markers
+            const content = marker.content as HTMLElement;
+            const markerEl = content.querySelector('.pocket-marker') as HTMLElement;
+            if (markerEl) {
+              // Subtle scale effect
+              markerEl.style.transform = 'rotate(-45deg) scale(1.1)';
+              setTimeout(() => {
+                markerEl.style.transform = 'rotate(-45deg)';
+              }, 300);
+            }
+          } else if (marker instanceof google.maps.Marker) {
+            // For legacy markers
+            marker.setAnimation(google.maps.Animation.BOUNCE);
+            setTimeout(() => {
+              marker.setAnimation(null);
+            }, 700);
+          }
+        }
+      } else {
+        // Regular zoom for different locations
+        console.log(`Zooming to group ${groupId}: ${group.university}`);
+        map.panTo(position);
+        map.setZoom(15); // Set appropriate zoom level
+      }
+      
+      // Only show popup if explicitly requested (to prevent flicker)
+      if (showPopup) {
+        setSelectedGroup(group);
+        setSelectedPosition(position);
+      }
     },
     clearMapClicks: () => {
       console.log('Clearing map clicked markers');

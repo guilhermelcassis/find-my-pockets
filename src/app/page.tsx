@@ -662,46 +662,72 @@ export default function Home() {
       return;
     }
     
+    // If it's the same group already selected, don't trigger the whole sequence again
+    if (selectedGroupId === groupId) {
+      console.log('Group already selected, skipping transitions');
+      return;
+    }
+    
     console.log(`Result clicked in list for group ${groupId}`);
-    setSelectedGroupId(groupId);
     
     // Find the group from all available groups
     const allAvailableGroups = searchResults.length > 0 ? searchResults : allGroups;
     const group = allAvailableGroups.find(g => g.id === groupId);
+    const previousGroup = selectedGroupId ? allAvailableGroups.find(g => g.id === selectedGroupId) : null;
     
     if (!group) {
       console.log('Group not found for ID:', groupId);
       return;
     }
     
-    // IMPROVED: When clicking on a list result, implement a more reliable zooming sequence
-    // First, simply highlight the marker without changing zoom
-    if (mapRef.current) {
-      console.log('First highlighting marker for:', group.university);
-      mapRef.current.showGroupDetails(groupId);
+    // Check if this is a transition between groups at the same university
+    // This helps determine if we need special handling
+    const isSameUniversity = previousGroup && 
+                           previousGroup.university === group.university &&
+                           previousGroup.id !== group.id;
+                           
+    if (isSameUniversity) {
+      console.log('Smooth transition between groups at the same university');
     }
     
-    // Then zoom to the location with a slight delay to prevent visual jumps
-    setTimeout(() => {
-      if (mapRef.current) {
-        console.log('Now zooming to clicked result:', group.university);
-        mapRef.current.zoomToGroup(groupId);
+    // Set selected ID to trigger UI updates
+    setSelectedGroupId(groupId);
+    
+    // IMPROVED TRANSITION SEQUENCE
+    if (mapRef.current) {
+      console.log('Zooming and showing details for:', group.university);
+      
+      if (isSameUniversity) {
+        // For same university transitions, use a special sequence
+        // 1. First just show the details without zooming to avoid jolting the map
+        mapRef.current.showGroupDetails(groupId, true);
         
-        // Finally, ensure the popup is visible after zooming completes
+        // 2. Then do a very gentle pan to the new position without changing zoom level
         setTimeout(() => {
           if (mapRef.current) {
-            console.log('Ensuring popup is visible for:', group.university);
-            mapRef.current.showGroupDetails(groupId);
+            // The false parameter ensures we don't show the popup again (no blinking)
+            mapRef.current.zoomToGroup(groupId, false);
           }
-        }, 500); // Delay to allow zoom animation to complete
+        }, 50);
+      } else {
+        // For different universities, use the regular sequence
+        // First zoom to location
+        mapRef.current.zoomToGroup(groupId);
+        
+        // After a short delay, show the card with permanent flag
+        setTimeout(() => {
+          if (mapRef.current) {
+            mapRef.current.showGroupDetails(groupId, true);
+          }
+        }, 250);
       }
-    }, 100);
+    }
     
     // For mobile view, switch to map view when a result is clicked
     if (window.innerWidth < 1024) { // lg breakpoint in Tailwind
       setMobileView('map');
     }
-  }, [searchResults, allGroups]);
+  }, [searchResults, allGroups, selectedGroupId]);
 
   // Function to safely set search term without causing map flickering
   const updateSearchTerm = (value: string) => {
