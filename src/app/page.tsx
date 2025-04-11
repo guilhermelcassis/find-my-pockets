@@ -1167,23 +1167,56 @@ export default function Home() {
   return (
     <main className={`min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 flex flex-col ${plusJakarta.variable} ${spaceGrotesk.variable} ${inter.variable} ${poppins.variable}`}>
       {/* Use stable gradient classes that are consistent between server/client */}
-      <div className="bg-gradient-to-r from-[#0f2c5a] via-[#1e3c6e] to-[#0f2c5a] text-white relative overflow-hidden">
-        {/* Static decorative elements - exact same server/client */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-400 rounded-full mix-blend-multiply filter blur-3xl"></div>
-          <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl"></div>
+      <div className="bg-dunamis-gradient text-white relative overflow-hidden">
+        {/* Enhanced decorative elements with more depth and visual interest */}
+        <div className="absolute inset-0">
+          {/* Primary glow elements - increased blur radius and size */}
+          <div className="absolute top-[-40%] left-[-15%] w-[90%] h-[90%] bg-purple-900/40 rounded-full filter blur-[180px] opacity-50 animate-pulse-slow"></div>
+          <div className="absolute bottom-[-20%] right-[-10%] w-[80%] h-[80%] bg-primary/30 rounded-full filter blur-[200px] opacity-40 animate-pulse-slower"></div>
+          
+          {/* Secondary glow elements */}
+          <div className="absolute top-[5%] right-[10%] w-[60%] h-[60%] bg-purple-800/30 rounded-full filter blur-[150px] opacity-40 animate-pulse-slow" style={{ animationDelay: '-4s' }}></div>
+          <div className="absolute bottom-[10%] left-[5%] w-[50%] h-[50%] bg-primary/25 rounded-full filter blur-[130px] opacity-35 animate-pulse-slower" style={{ animationDelay: '-6s' }}></div>
+          
+          {/* Additional violet blurs for more depth and variation */}
+          <div className="absolute top-[30%] left-[35%] w-[70%] h-[70%] bg-purple-900/30 rounded-full filter blur-[170px] opacity-35 animate-float-subtle" style={{ animationDelay: '-3s' }}></div>
+          <div className="absolute bottom-[35%] right-[30%] w-[65%] h-[65%] bg-[#2f1260]/30 rounded-full filter blur-[160px] opacity-40 animate-float-subtle" style={{ animationDelay: '-8s' }}></div>
+          
+          {/* Swirling accent elements for movement */}
+          <div className="absolute top-[15%] left-[25%] w-[40%] h-[40%] bg-purple-800/25 rounded-full filter blur-[120px] opacity-30 animate-float-subtle" style={{ animationDelay: '-12s' }}></div>
+          <div className="absolute bottom-[20%] right-[20%] w-[35%] h-[35%] bg-[#461c88]/25 rounded-full filter blur-[110px] opacity-35 animate-float-subtle" style={{ animationDelay: '-5s' }}></div>
+          
+          {/* Central glowing element */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[60%] h-[60%] bg-purple-900/20 rounded-full filter blur-[130px] opacity-40 animate-pulse-slower"></div>
+          
+          {/* Subtle moving highlights */}
+          <div className="absolute top-[20%] left-[20%] w-[25%] h-[25%] bg-white/5 rounded-full filter blur-[70px] animate-float-subtle"></div>
+          <div className="absolute bottom-[25%] right-[25%] w-[20%] h-[20%] bg-primary/20 rounded-full filter blur-[60px] animate-float-subtle" style={{ animationDelay: '-7s' }}></div>
+          
+          {/* Orange accent elements */}
+          <div className="absolute top-[40%] right-[15%] w-[30%] h-[30%] bg-primary/15 rounded-full filter blur-[90px] opacity-30 animate-float-subtle" style={{ animationDelay: '-9s' }}></div>
+          <div className="absolute bottom-[15%] left-[40%] w-[20%] h-[20%] bg-[#ff7a59]/15 rounded-full filter blur-[80px] opacity-25 animate-float-subtle" style={{ animationDelay: '-4s' }}></div>
+          
+          {/* Subtle overlay pattern for texture */}
+          <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1IiBoZWlnaHQ9IjUiPgo8cmVjdCB3aWR0aD0iNSIgaGVpZ2h0PSI1IiBmaWxsPSIjZmZmIiBmaWxsLW9wYWNpdHk9IjAuMDIiPjwvcmVjdD4KPC9zdmc+')] opacity-15"></div>
+          
+          {/* Vignette effect for more depth - softer version */}
+          <div className="absolute inset-0 bg-gradient-radial from-transparent to-black/20 opacity-30"></div>
         </div>
         
         <div className="max-w-7xl mx-auto w-full px-4 md:px-6 py-14 md:py-20 relative z-10">
           <div className="max-w-3xl mx-auto text-center mb-10">
-            <div className="inline-flex items-center justify-center mb-6 bg-white/10 backdrop-blur-sm px-4 py-1.5 rounded-full">
-              <span className="h-2 w-2 bg-emerald-400 rounded-full mr-2"></span>
-              <span className="text-xs text-emerald-50 font-medium tracking-wide uppercase">Encontre sua comunidade</span>
+            <div className="inline-flex items-center justify-center mb-6 bg-white/5 backdrop-blur-sm px-4 py-1.5 rounded-full border border-white/10 shadow-sm">
+              <span className="h-2 w-2 bg-primary rounded-full mr-2"></span>
+              <span className="text-xs text-white font-medium tracking-wide uppercase">Encontre sua comunidade</span>
             </div>
             <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold mb-5 tracking-tight font-space-grotesk leading-none">
-              Encontre <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 to-sky-300">Dunamis Pockets</span>
+              Encontre <span className="text-transparent bg-clip-text bg-dunamis-orange relative inline-block">
+                Dunamis Pockets
+                <span className="absolute inset-0 bg-primary/20 blur-xl opacity-30 -z-10 rounded-full animate-pulse-slow"></span>
+              </span>
             </h1>
-            <p className="text-md md:text-lg text-indigo-100/90 max-w-2xl mx-auto leading-relaxed font-light">
+            <p className="text-md md:text-lg text-white/80 max-w-2xl mx-auto leading-relaxed font-light">
               Conecte-se com grupos universitários em todo o Brasil e encontre sua comunidade onde quer que você esteja.
             </p>
           </div>
@@ -1194,7 +1227,7 @@ export default function Home() {
               <form onSubmit={handleSearch} className="w-full">
                 <div className="relative">
                   {/* Refined search input with subtle animation and better focus state */}
-                  <div className="relative flex items-center bg-white/10 backdrop-blur-md rounded-2xl overflow-hidden shadow-xl transition-all duration-300 hover:shadow-indigo-500/10 border border-white/20 focus-within:ring-2 focus-within:ring-sky-400/50 focus-within:border-sky-400/50">
+                  <div className="relative flex items-center bg-white/10 backdrop-blur-md rounded-2xl overflow-hidden shadow-xl transition-all duration-300 hover:shadow-primary/10 border border-white/20 focus-within:ring-2 focus-within:ring-primary/50 focus-within:border-primary/50">
                     <input
                       ref={searchInputRef}
                       type="text"
@@ -1216,7 +1249,7 @@ export default function Home() {
                         }, 200);
                       }}
                       placeholder="Busque por universidade, cidade, estado ou país..."
-                      className="w-full py-5 pl-6 pr-32 text-white placeholder-indigo-200/70 focus:outline-none text-base md:text-lg rounded-2xl bg-transparent"
+                      className="w-full py-5 pl-6 pr-32 text-white placeholder-white/70 focus:outline-none text-base md:text-lg rounded-2xl bg-transparent"
                       aria-label="Pesquisar grupos"
                       autoComplete="off"
                     />
@@ -1234,7 +1267,7 @@ export default function Home() {
                             searchInputRef.current.blur();
                           }
                         }}
-                        className="absolute right-24 text-indigo-200 hover:text-white focus:outline-none p-2 transition-colors"
+                        className="absolute right-24 text-white/70 hover:text-white focus:outline-none p-2 transition-colors"
                         aria-label="Limpar pesquisa"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -1244,7 +1277,7 @@ export default function Home() {
                     )}
                     <button
                       type="submit"
-                      className="absolute right-0 h-full px-6 bg-gradient-to-r from-emerald-500 to-sky-500 text-white font-medium flex items-center justify-center hover:from-emerald-600 hover:to-sky-600 transition-all duration-300 rounded-r-2xl"
+                      className="absolute right-0 h-full px-6 bg-primary text-white font-medium flex items-center justify-center hover:opacity-90 transition-all duration-300 rounded-r-2xl"
                       disabled={isLoading}
                       aria-label="Pesquisar"
                     >
@@ -1275,7 +1308,7 @@ export default function Home() {
                     >
                       {isLoadingSuggestions ? (
                         <div className="p-4 text-gray-500 text-sm flex justify-center items-center">
-                          <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-indigo-600 mr-2"></div>
+                          <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-primary mr-2"></div>
                           Carregando sugestões...
                         </div>
                       ) : suggestionItems.length > 0 ? (
@@ -1286,16 +1319,16 @@ export default function Home() {
                             return (
                               <li 
                                 key={index}
-                                className={`px-4 py-3 hover:bg-indigo-50/80 cursor-pointer border-b border-gray-100/60 last:border-b-0 transition-all duration-200 ${
-                                  isSelected ? 'bg-indigo-50/80' : ''
+                                className={`px-4 py-3 hover:bg-secondary/80 cursor-pointer border-b border-gray-100/60 last:border-b-0 transition-all duration-200 ${
+                                  isSelected ? 'bg-secondary/80' : ''
                                 }`}
                                 onClick={(e) => handleSelectSuggestion(suggestion, e)}
                               >
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center">
                                     {suggestion.type === 'university' && (
-                                      <div className={`w-10 h-10 flex-shrink-0 ${isSelected ? 'bg-indigo-100' : 'bg-indigo-50'} rounded-xl flex items-center justify-center mr-3 transition-colors duration-200`}>
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <div className={`w-10 h-10 flex-shrink-0 ${isSelected ? 'bg-secondary' : 'bg-secondary/50'} rounded-xl flex items-center justify-center mr-3 transition-colors duration-200`}>
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-secondary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                           <path d="M12 14l9-5-9-5-9 5 9 5z" />
                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5z" />
                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14.5V20" />
@@ -1304,29 +1337,29 @@ export default function Home() {
                                       </div>
                                     )}
                                     {suggestion.type === 'city' && (
-                                      <div className={`w-10 h-10 flex-shrink-0 ${isSelected ? 'bg-emerald-100' : 'bg-emerald-50'} rounded-xl flex items-center justify-center mr-3 transition-colors duration-200`}>
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <div className={`w-10 h-10 flex-shrink-0 ${isSelected ? 'bg-secondary' : 'bg-secondary/50'} rounded-xl flex items-center justify-center mr-3 transition-colors duration-200`}>
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-secondary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                                         </svg>
                                       </div>
                                     )}
                                     {suggestion.type === 'state' && (
-                                      <div className={`w-10 h-10 flex-shrink-0 ${isSelected ? 'bg-violet-100' : 'bg-violet-50'} rounded-xl flex items-center justify-center mr-3 transition-colors duration-200`}>
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <div className={`w-10 h-10 flex-shrink-0 ${isSelected ? 'bg-secondary' : 'bg-secondary/50'} rounded-xl flex items-center justify-center mr-3 transition-colors duration-200`}>
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-secondary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
                                         </svg>
                                       </div>
                                     )}
                                     {suggestion.type === 'country' && (
-                                      <div className={`w-10 h-10 flex-shrink-0 ${isSelected ? 'bg-amber-100' : 'bg-amber-50'} rounded-xl flex items-center justify-center mr-3 transition-colors duration-200`}>
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <div className={`w-10 h-10 flex-shrink-0 ${isSelected ? 'bg-secondary' : 'bg-secondary/50'} rounded-xl flex items-center justify-center mr-3 transition-colors duration-200`}>
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-secondary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                         </svg>
                                       </div>
                                     )}
                                     
                                     <div className="flex flex-col">
-                                      <span className={`font-medium ${isSelected ? 'text-indigo-700' : 'text-gray-800'} transition-colors duration-200`}>
+                                      <span className={`font-medium ${isSelected ? 'text-primary' : 'text-gray-800'} transition-colors duration-200`}>
                                         {suggestion.displayText}
                                       </span>
                                       <span className="text-xs text-gray-500 font-medium">
@@ -1339,10 +1372,10 @@ export default function Home() {
                                   </div>
                                   
                                   <div className={`${
-                                    suggestion.type === 'university' ? (isSelected ? 'bg-indigo-100 text-indigo-700' : 'bg-indigo-50 text-indigo-600') :
-                                    suggestion.type === 'city' ? (isSelected ? 'bg-emerald-100 text-emerald-700' : 'bg-emerald-50 text-emerald-600') :
-                                    suggestion.type === 'country' ? (isSelected ? 'bg-amber-100 text-amber-700' : 'bg-amber-50 text-amber-600') :
-                                    (isSelected ? 'bg-violet-100 text-violet-700' : 'bg-violet-50 text-violet-600')
+                                    suggestion.type === 'university' ? (isSelected ? 'bg-secondary text-secondary-foreground' : 'bg-secondary/50 text-secondary-foreground') :
+                                    suggestion.type === 'city' ? (isSelected ? 'bg-secondary text-secondary-foreground' : 'bg-secondary/50 text-secondary-foreground') :
+                                    suggestion.type === 'country' ? (isSelected ? 'bg-secondary text-secondary-foreground' : 'bg-secondary/50 text-secondary-foreground') :
+                                    (isSelected ? 'bg-secondary text-secondary-foreground' : 'bg-secondary/50 text-secondary-foreground')
                                   } rounded-full px-3 py-1 text-xs font-medium ml-2 min-w-[56px] text-center transition-colors duration-200`}>
                                     {suggestion.count} {suggestion.count === 1 ? 'grupo' : 'grupos'}
                                   </div>
@@ -1360,7 +1393,7 @@ export default function Home() {
                   )}
                 </div>
 
-                {/* Modern Quick Filter Pills */}
+                {/* Modern Quick Filter Pills with improved glass effect */}
                 <div className="flex flex-wrap justify-center mt-6 gap-2">
                   <button
                     type="button"
@@ -1403,7 +1436,7 @@ export default function Home() {
                         }
                       }, 1000);
                     }}
-                    className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-full text-sm font-medium shadow-md hover:from-indigo-700 hover:to-indigo-800 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 border border-indigo-700 flex items-center"
+                    className="px-5 py-2.5 bg-primary/90 text-white rounded-full text-sm font-medium shadow-lg hover:bg-primary transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary/50 border border-primary/20 flex items-center backdrop-blur-sm"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1421,7 +1454,7 @@ export default function Home() {
                         setSearchType(null);
                         performSearch(suggestion, e as unknown as React.FormEvent, true, null);
                       }}
-                      className="px-4 py-2 bg-white/10 backdrop-blur-sm text-white rounded-full text-sm hover:bg-white/20 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-white/30 border border-white/10 shadow-sm"
+                      className="px-4 py-2 bg-white/10 backdrop-blur-sm text-white rounded-full text-sm hover:bg-white/20 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-white/30 border border-white/10 shadow-md"
                     >
                       {suggestion}
                     </button>
@@ -1433,10 +1466,17 @@ export default function Home() {
               <div className="w-full">
                 <div className="relative flex items-center bg-white/10 backdrop-blur-md rounded-2xl overflow-hidden shadow-xl border border-white/20 h-16 md:h-[70px]">
                   <div className="w-full h-full bg-white/5"></div>
-                  <div className="absolute right-0 h-full w-24 bg-gradient-to-r from-emerald-500/80 to-sky-500/80 rounded-r-2xl"></div>
+                  <div className="absolute right-0 h-full w-24 bg-primary rounded-r-2xl"></div>
                 </div>
                 
                 <div className="flex flex-wrap justify-center mt-6 gap-2">
+                  <div className="px-5 py-2.5 bg-primary/90 text-white rounded-full text-sm font-medium shadow-lg border border-primary/20 flex items-center backdrop-blur-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Mostrar todos os Pockets
+                  </div>
+                  
                   {['Brasil', 'São Paulo', 'Rio de Janeiro', 'USP'].map((suggestion) => (
                     <div
                       key={suggestion}
@@ -1464,7 +1504,7 @@ export default function Home() {
                     onClick={() => setMobileView('map')}
                     className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 ${
                       mobileView === 'map'
-                        ? 'bg-gradient-to-r from-indigo-500 to-indigo-600 text-white shadow-sm'
+                        ? 'bg-dunamis-gradient text-white shadow-sm'
                         : 'text-gray-600 hover:bg-gray-50'
                     }`}
                   >
@@ -1479,7 +1519,7 @@ export default function Home() {
                     onClick={() => setMobileView('list')}
                     className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 ${
                       mobileView === 'list'
-                        ? 'bg-gradient-to-r from-indigo-500 to-indigo-600 text-white shadow-sm'
+                        ? 'bg-dunamis-gradient text-white shadow-sm'
                         : 'text-gray-600 hover:bg-gray-50'
                     }`}
                   >
@@ -1507,7 +1547,7 @@ export default function Home() {
                   </span>
                   {searchTerm && (
                     <span className="ml-2 text-sm text-gray-500">
-                      para <span className="font-medium text-indigo-700">{searchTerm}</span>
+                      para <span className="font-medium text-primary">{searchTerm}</span>
                     </span>
                   )}
                 </div>
@@ -1576,23 +1616,23 @@ export default function Home() {
       </div>
 
       {/* Footer */}
-      <footer className="bg-white/80 backdrop-blur-md border-t border-gray-200 py-6 mt-10">
+      <footer className="bg-dunamis-gradient text-white py-6 mt-10 border-t border-white/5">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="mb-4 md:mb-0">
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-white/80">
                 {/* Use a static year for server rendering, and update it client-side */}
                 © {isClient ? new Date().getFullYear() : 2023} Dunamis Pockets. Todos os direitos reservados.
               </p>
             </div>
             <div className="flex space-x-4">
-              <a href="#" className="text-gray-500 hover:text-indigo-600 transition-colors">
+              <a href="https://www.instagram.com/dunamispockets/" target="_blank" rel="noopener noreferrer" className="text-white/80 hover:text-white transition-colors">
                 <span className="sr-only">Instagram</span>
                 <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path fillRule="evenodd" d="M12.315 2c2.43 0 2.784.013 3.808.06 1.064.049 1.791.218 2.427.465a4.902 4.902 0 011.772 1.153 4.902 4.902 0 011.153 1.772c.247.636.416 1.363.465 2.427.048 1.067.06 1.407.06 4.123v.08c0 2.643-.012 2.987-.06 4.043-.049 1.064-.218 1.791-.465 2.427a4.902 4.902 0 01-1.153 1.772 4.902 4.902 0 01-1.772 1.153c-.636.247-1.363.416-2.427.465-1.067.048-1.407.06-4.123.06h-.08c-2.643 0-2.987-.012-4.043-.06-1.064-.049-1.791-.218-2.427-.465a4.902 4.902 0 01-1.772-1.153 4.902 4.902 0 01-1.153-1.772c-.247-.636-.416-1.363-.465-2.427-.047-1.024-.06-1.379-.06-3.808v-.63c0-2.43.013-2.784.06-3.808.049-1.064.218-1.791.465-2.427a4.902 4.902 0 011.153-1.772A4.902 4.902 0 015.45 2.525c.636-.247 1.363-.416 2.427-.465C8.901 2.013 9.256 2 11.685 2h.63zm-.081 1.802h-.468c-2.456 0-2.784.011-3.807.058-.975.045-1.504.207-1.857.344-.467.182-.8.398-1.15.748-.35.35-.566.683-.748 1.15-.137.353-.3.882-.344 1.857-.047 1.023-.058 1.351-.058 3.807v.468c0 2.456.011 2.784.058 3.807.045.975.207 1.504.344 1.857.182.466.399.8.748 1.15.35.35.683.566 1.15.748.353.137.882.3 1.857.344 1.054.048 1.37.058 4.041.058h.08c2.597 0 2.917-.01 3.96-.058.976-.045 1.505-.207 1.858-.344.466-.182.8-.398 1.15-.748.35-.35.566-.683.748-1.15.137-.353.3-.882.344-1.857.048-1.055.058-1.37.058-4.041v-.08c0-2.597-.01-2.917-.058-3.96-.045-.976-.207-1.505-.344-1.858a3.097 3.097 0 00-.748-1.15 3.098 3.098 0 00-1.15-.748c-.353-.137-.882-.3-1.857-.344-1.023-.047-1.351-.058-3.807-.058zM12 6.865a5.135 5.135 0 110 10.27 5.135 5.135 0 010-10.27zm0 1.802a3.333 3.333 0 100 6.666 3.333 3.333 0 000-6.666zm5.338-3.205a1.2 1.2 0 110 2.4 1.2 1.2 0 010-2.4z" clipRule="evenodd" />
                 </svg>
               </a>
-              <a href="#" className="text-gray-500 hover:text-indigo-600 transition-colors">
+              <a href="https://dunamismovement.com/" target="_blank" rel="noopener noreferrer" className="text-white/80 hover:text-white transition-colors">
                 <span className="sr-only">Website</span>
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />

@@ -16,7 +16,14 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Dunamis Pockets",
-  description: "Encontre Pockets Dunamis pelo mundo",
+  description: "Encontre Dunamis Pockets pelo mundo",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon.png", type: "image/png" }
+    ],
+    apple: { url: "/apple-icon.png", type: "image/png" },
+  }
 };
 
 export default function RootLayout({
@@ -27,6 +34,9 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <head>
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="icon" href="/icon.png" type="image/png" />
+        <link rel="apple-touch-icon" href="/apple-icon.png" />
         <Script id="google-maps-guard" strategy="beforeInteractive">
           {`
             // Prevent multiple initializations of Google Maps

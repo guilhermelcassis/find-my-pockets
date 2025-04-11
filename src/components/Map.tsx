@@ -473,8 +473,11 @@ const Map = forwardRef<MapRef, MapProps>(({
       
       // Create marker element with proper styling
       const markerSize = isSelected ? 40 : 32; // Make selected markers larger
-      const markerColor = isSelected ? '#2563eb' : '#3b82f6'; // Use a darker blue for selected
-      const shadowSize = isSelected ? '0 4px 8px rgba(37, 99, 235, 0.5)' : '0 2px 4px rgba(0, 0, 0, 0.2)';
+      // Use darker purple with light orange border
+      const markerColor = isSelected ? '#ff5864' : '#3d1870'; // Dark purple for regular markers
+      const borderColor = isSelected ? '#ff5864' : '#ff8b4c'; // Light orange border (using the gradient end color)
+      const borderWidth = isSelected ? '1px' : '1px';
+      const shadowSize = isSelected ? '0 4px 8px rgba(255, 88, 100, 0.5)' : '0 2px 4px rgba(0, 0, 0, 0.2)';
       
       // Create container for the marker
       const container = document.createElement('div');
@@ -492,7 +495,7 @@ const Map = forwardRef<MapRef, MapProps>(({
           box-shadow: ${shadowSize};
           transition: all 0.3s ease;
           cursor: pointer;
-          border: ${isSelected ? '2px solid white' : 'none'};
+          border: ${borderWidth} solid ${borderColor};
         ">
           <div style="
             transform: rotate(45deg);
@@ -522,7 +525,7 @@ const Map = forwardRef<MapRef, MapProps>(({
             width: ${markerSize + 20}px;
             height: ${markerSize + 20}px;
             border-radius: 50%;
-            background-color: rgba(37, 99, 235, 0.3);
+            background-color: rgba(255, 88, 100, 0.3);
             animation: pulse 1.5s infinite;
             z-index: -1;
           }
@@ -611,10 +614,10 @@ const Map = forwardRef<MapRef, MapProps>(({
         animation: isSelected ? window.google.maps.Animation.BOUNCE : null,
         icon: {
           path: window.google.maps.SymbolPath.CIRCLE,
-          fillColor: isSelected ? '#2563eb' : '#3b82f6',
+          fillColor: isSelected ? '#ff5864' : '#3d1870', // Dark purple for regular markers
           fillOpacity: 1,
-          strokeColor: 'white',
-          strokeWeight: isSelected ? 2 : 1,
+          strokeColor: isSelected ? '#ff5864' : '#ff8b4c', // Light orange border
+          strokeWeight: isSelected ? 3 : 2,
           scale: isSelected ? 12 : 10
         },
         label: {

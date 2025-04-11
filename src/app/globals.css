@@ -4,42 +4,42 @@
 
 @layer base {
   :root {
-    /* Main colors */
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Main colors - Purple theme based on Dunamis branding */
+    --background: 270 30% 98%;
+    --foreground: 270 50% 15%;
     
     /* Card colors */
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 270 50% 15%;
     
     /* Popover colors */
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 270 50% 15%;
     
-    /* Primary colors - Rich Burgundy/Crimson shade */
-    --primary: 350 65% 41%;
-    --primary-foreground: 210 40% 98%;
+    /* Primary colors - Bright coral/orange-red from Dunamis logo */
+    --primary: 12 95% 60%;
+    --primary-foreground: 0 0% 100%;
     
-    /* Secondary colors */
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* Secondary colors - Soft purple */
+    --secondary: 270 70% 95%;
+    --secondary-foreground: 270 60% 35%;
     
     /* Muted colors */
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 270 20% 94%;
+    --muted-foreground: 270 10% 40%;
     
-    /* Accent colors */
-    --accent: 350 65% 95%;
-    --accent-foreground: 350 65% 30%;
+    /* Accent colors - Bright lime green from CON banner */
+    --accent: 80 100% 65%;
+    --accent-foreground: 270 50% 15%;
     
     /* Destructive colors */
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: 0 0% 100%;
 
-    /* Border and input colors - Enhanced for better contrast */
-    --border: 350 30% 88%;
-    --input: 350 15% 90%;
-    --ring: 350 65% 41%;
+    /* Border and input colors */
+    --border: 270 30% 88%;
+    --input: 270 30% 90%;
+    --ring: 12 95% 60%;
 
     /* Radii */
     --radius: 0.5rem;
@@ -47,41 +47,41 @@
  
   .dark {
     /* Main colors */
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    --background: 270 50% 10%;
+    --foreground: 270 10% 95%;
     
     /* Card colors */
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card: 270 50% 12%;
+    --card-foreground: 270 10% 95%;
     
     /* Popover colors */
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 270 50% 12%;
+    --popover-foreground: 270 10% 95%;
     
-    /* Primary colors - Rich Burgundy/Crimson shade */
-    --primary: 350 65% 55%;
-    --primary-foreground: 210 40% 98%;
+    /* Primary colors - Brighter coral/orange-red in dark mode */
+    --primary: 12 95% 65%;
+    --primary-foreground: 0 0% 100%;
     
     /* Secondary colors */
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 270 60% 25%;
+    --secondary-foreground: 270 20% 95%;
     
     /* Muted colors */
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 270 40% 20%;
+    --muted-foreground: 270 30% 70%;
     
-    /* Accent colors */
-    --accent: 350 65% 25%;
-    --accent-foreground: 210 40% 98%;
+    /* Accent colors - Brighter lime in dark mode */
+    --accent: 80 100% 70%;
+    --accent-foreground: 270 50% 10%;
     
     /* Destructive colors */
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 60%;
+    --destructive-foreground: 0 0% 100%;
     
-    /* Border and input colors - Enhanced for better contrast */
-    --border: 350 30% 30%;
-    --input: 350 30% 25%;
-    --ring: 350 65% 50%;
+    /* Border and input colors */
+    --border: 270 40% 25%;
+    --input: 270 40% 20%;
+    --ring: 12 95% 65%;
   }
 }
 
@@ -143,7 +143,7 @@
   }
   
   .card-header {
-    @apply px-4 py-3 border-b border-border bg-gray-50;
+    @apply px-4 py-3 border-b border-border bg-secondary/50;
   }
   
   .form-input-base {
@@ -152,7 +152,7 @@
     focus-visible:ring-ring;
   }
   
-  /* Buttons */
+  /* Buttons - Using the coral/orange color from Dunamis */
   .btn-primary {
     @apply bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center 
     justify-center rounded-md font-medium transition-colors focus-visible:outline-none 
@@ -172,7 +172,7 @@
   }
 
   .btn-outline {
-    @apply border border-input bg-transparent hover:bg-accent hover:text-accent-foreground
+    @apply border border-input bg-transparent hover:bg-secondary/30 hover:text-secondary-foreground
     inline-flex items-center justify-center rounded-md font-medium transition-colors
     focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring
     disabled:pointer-events-none disabled:opacity-50;
@@ -215,5 +215,112 @@
   /* Make sure Google Maps fills the container */
   .gm-style {
     height: 100%;
+  }
+
+  /* Dunamis-specific gradients that can be used in your existing components */
+  .bg-dunamis-gradient {
+    background: linear-gradient(135deg, #220a48 0%, #210e3d 100%);
+  }
+  
+  .bg-dunamis-gradient-light {
+    background: linear-gradient(135deg, #3d1870 0%, #3c195f 100%);
+  }
+  
+  .bg-dunamis-gradient-alt {
+    background: linear-gradient(135deg, #3d1870 0%, #ff5864 100%);
+  }
+  
+  /* Enhanced admin navbar gradient with animation */
+  .admin-navbar-gradient {
+    position: relative;
+    background: linear-gradient(135deg, #2a0d54 0%, #400f77 50%, #2a0d54 100%);
+  }
+  
+  .admin-navbar-gradient::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+      to right,
+      rgba(28, 17, 68, 0) 0%,
+      rgba(23, 13, 59, 0.1) 25%, 
+      rgba(28, 17, 73, 0.2) 50%,
+      rgba(25, 15, 65, 0.1) 75%,
+      rgba(32, 20, 80, 0) 100%
+    );
+    background-size: 200% 100%;
+    animation: gradientShift 8s ease infinite;
+    z-index: 0;
+  }
+  
+  @keyframes gradientShift {
+    0% { background-position: 100% 50%; }
+    50% { background-position: 0% 50%; }
+    100% { background-position: 100% 50%; }
+  }
+  
+  .bg-dunamis-orange {
+    background: linear-gradient(135deg, #ff5864 0%, #ff8b4c 100%);
+  }
+
+  /* Hero section animations */
+  @keyframes pulse-slow {
+    0%, 100% {
+      opacity: 0.2;
+      transform: scale(0.95);
+    }
+    50% {
+      opacity: 0.4;
+      transform: scale(1.1);
+    }
+  }
+
+  @keyframes pulse-slower {
+    0%, 100% {
+      opacity: 0.15;
+      transform: scale(0.9);
+    }
+    50% {
+      opacity: 0.35;
+      transform: scale(1.15);
+    }
+  }
+
+  @keyframes float-subtle {
+    0% {
+      transform: translateY(0) translateX(0);
+    }
+    25% {
+      transform: translateY(-15px) translateX(10px);
+    }
+    50% {
+      transform: translateY(0) translateX(20px);
+    }
+    75% {
+      transform: translateY(15px) translateX(10px);
+    }
+    100% {
+      transform: translateY(0) translateX(0);
+    }
+  }
+
+  .animate-pulse-slow {
+    animation: pulse-slow 10s ease-in-out infinite;
+  }
+
+  .animate-pulse-slower {
+    animation: pulse-slower 15s ease-in-out infinite;
+  }
+
+  .animate-float-subtle {
+    animation: float-subtle 20s ease-in-out infinite;
+  }
+  
+  /* Gradient utilities */
+  .bg-gradient-radial {
+    background-image: radial-gradient(var(--tw-gradient-stops));
   }
 }

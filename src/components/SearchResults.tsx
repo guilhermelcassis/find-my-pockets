@@ -76,8 +76,8 @@ const SearchResults: React.FC<SearchResultsProps> = ({
               className="mb-6 last:mb-0 pb-6 last:pb-0 border-b last:border-b-0 border-gray-100"
             >
               <div className="flex items-center mb-4">
-                <div className="p-2 bg-blue-50 rounded-lg mr-3">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="p-2 bg-secondary rounded-lg mr-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-secondary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
@@ -98,7 +98,7 @@ const SearchResults: React.FC<SearchResultsProps> = ({
                     key={group.id}
                     className={`p-4 rounded-xl transition-all duration-300 cursor-pointer relative ${
                       selectedGroupId === group.id
-                        ? 'bg-blue-50 border border-blue-400 shadow-sm'
+                        ? 'bg-secondary border border-secondary shadow-sm'
                         : 'bg-white hover:bg-gray-50 border border-gray-100 hover:border-gray-200'
                     }`}
                     data-group-id={group.id}
@@ -106,10 +106,10 @@ const SearchResults: React.FC<SearchResultsProps> = ({
                   >
                     <div className="flex items-start mb-3">
                       <div className={`h-12 w-12 flex-shrink-0 rounded-lg flex items-center justify-center overflow-hidden ${
-                        selectedGroupId === group.id ? 'bg-blue-100' : 'bg-gray-100'
+                        selectedGroupId === group.id ? 'bg-secondary' : 'bg-gray-100'
                       }`}>
                         {group.university && (
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-secondary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path d="M12 14l9-5-9-5-9 5 9 5z" />
                             <path d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14zm-4 6v-7.5l4-2.222" />
@@ -122,7 +122,7 @@ const SearchResults: React.FC<SearchResultsProps> = ({
                         <div className="flex flex-wrap gap-3 mt-1.5">
                           {group.meetingTimes && group.meetingTimes.length > 0 && (
                             <div className="flex items-center text-sm text-gray-600">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 mr-1 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 mr-1 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                               </svg>
                               {group.meetingTimes[0].dayofweek} • {group.meetingTimes[0].time}
@@ -131,7 +131,7 @@ const SearchResults: React.FC<SearchResultsProps> = ({
                           
                           {group.leader && (
                             <div className="flex items-center text-sm text-gray-600">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 mr-1 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 mr-1 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                               </svg>
                               {group.leader.name}
@@ -199,7 +199,7 @@ const SearchResults: React.FC<SearchResultsProps> = ({
                           href={`https://www.google.com/maps/search/?api=1&query=${group.coordinates.latitude},${group.coordinates.longitude}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center justify-center py-3 px-2 rounded-xl bg-blue-50 text-blue-600 font-medium text-sm transition-all duration-200 hover:bg-blue-500 hover:text-white hover:shadow-md min-h-[48px]"
+                          className="flex items-center justify-center py-3 px-2 rounded-xl bg-secondary text-secondary-foreground font-medium text-sm transition-all duration-200 hover:bg-secondary/80 hover:text-secondary-foreground hover:shadow-md min-h-[48px]"
                           onClick={(e) => e.stopPropagation()}
                           aria-label="Ver no Google Maps"
                         >

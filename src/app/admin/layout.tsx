@@ -170,21 +170,20 @@ export default function AdminLayout({
       {/* Admin layout wrapper */}
       <div className="admin-layout min-h-screen bg-gray-50 flex flex-col">
         {/* Modern single-row colored navbar */}
-        <header className="bg-gradient-to-r from-[#8b1a34] via-[#9b1f3b] to-[#8b1a34] sticky top-0 z-10 shadow-md">
+        <header className="admin-navbar-gradient backdrop-blur-md sticky top-0 z-10 shadow-lg">
           <div className="max-w-7xl mx-auto">
-            <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
+            <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8 relative overflow-hidden">
               {/* Brand */}
-              <Link href="/admin" className="flex items-center space-x-3 shrink-0">
-                <div className="h-9 w-9 rounded-md bg-white/10 backdrop-blur-sm flex items-center justify-center shadow-md">
-                  <Layers className="h-5 w-5 text-white" />
-                </div>
-                <span className="text-lg font-bold text-white hidden sm:inline-block">
-                  Dunamis <span className="text-white/80">Pockets</span>
-                </span>
+              <Link href="/admin" className="flex items-center space-x-3 shrink-0 relative z-10">
+                <img 
+                  src="/images/dunamis-name.png" 
+                  alt="Dunamis Pockets" 
+                  className="h-4 w-auto"
+                />
               </Link>
               
               {/* Main navigation - redesigned with glass-effect pills */}
-              <nav className="flex items-center space-x-2">
+              <nav className="flex items-center space-x-2 relative z-10">
                 <Link
                   href="/admin"
                   className={`flex items-center px-3 py-2 rounded-full text-sm font-medium transition-all duration-150 ${
@@ -223,12 +222,12 @@ export default function AdminLayout({
               </nav>
               
               {/* User account */}
-              <div className="relative" ref={dropdownRef}>
+              <div className="relative z-10" ref={dropdownRef}>
                 <button 
                   className="flex items-center space-x-2 rounded-full pl-2 pr-3 py-1.5 hover:bg-white/10 transition-all duration-200"
                   onClick={() => setDropdownOpen(!dropdownOpen)}
                 >
-                  <div className="h-8 w-8 rounded-full bg-white/10 flex items-center justify-center overflow-hidden border border-white/20">
+                  <div className="h-8 w-8 rounded-full bg-white/15 flex items-center justify-center overflow-hidden border border-white/30">
                     <UserCircle className="h-6 w-6 text-white" />
                   </div>
                   <div className="hidden sm:flex items-center">
@@ -276,10 +275,10 @@ export default function AdminLayout({
         </main>
         
         {/* Footer */}
-        <footer className="bg-white border-t border-gray-200 py-4">
+        <footer className="admin-navbar-gradient text-white py-4">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <p className="text-center text-xs text-gray-500">
-              © {new Date().getFullYear()} Find My Pockets. Todos os direitos reservados.
+            <p className="text-center text-xs text-white/80 relative z-10">
+              © {new Date().getFullYear()} Dunamis Pockets. Todos os direitos reservados.
             </p>
           </div>
         </footer>
