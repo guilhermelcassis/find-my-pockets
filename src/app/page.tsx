@@ -1486,10 +1486,6 @@ export default function Home() {
             )}
             
             {/* Logo Section - Removed and repositioned to top corners */}
-            <div className="inline-flex items-center justify-center mb-6 bg-white/5 backdrop-blur-sm px-4 py-1.5 rounded-full border border-white/10 shadow-sm mt-6 sm:mt-0">
-              <span className="h-2 w-2 bg-primary rounded-full mr-2"></span>
-              <span className="text-xs text-white font-medium tracking-wide uppercase">Encontre um polo de avivamento na sua universidade</span>
-            </div>
             <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold mb-5 tracking-tight font-space-grotesk leading-none text-center">
               {/* Mobile: Two lines, Desktop: Single line */}
               <div className="md:whitespace-nowrap">
@@ -1726,22 +1722,6 @@ export default function Home() {
                     </svg>
                     Mostrar todos os Pockets
                   </button>
-                  
-                  {['Brasil', 'São Paulo', 'Rio de Janeiro', 'USP'].map((suggestion) => (
-                    <button
-                      key={suggestion}
-                      type="button"
-                      onClick={(e: React.MouseEvent) => {
-                        setSearchTerm(suggestion);
-                        // Explicitly set searchType to null and pass null as directType
-                        setSearchType(null);
-                        performSearch(suggestion, e as unknown as React.FormEvent, true, null);
-                      }}
-                      className="px-4 py-2 bg-white/10 backdrop-blur-sm text-white rounded-full text-sm hover:bg-white/20 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-white/30 border border-white/10 shadow-md"
-                    >
-                      {suggestion}
-                    </button>
-                  ))}
                 </div>
               </form>
             ) : (
