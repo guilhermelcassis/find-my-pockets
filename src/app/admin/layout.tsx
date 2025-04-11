@@ -176,9 +176,9 @@ export default function AdminLayout({
               {/* Brand */}
               <Link href="/admin" className="flex items-center space-x-3 shrink-0 relative z-10">
                 <img 
-                  src="/images/dunamis-name.png" 
+                  src="/FMP_LaranjaGradient.svg" 
                   alt="Dunamis Pockets" 
-                  className="h-4 w-auto"
+                  className="h-8 w-auto"
                 />
               </Link>
               

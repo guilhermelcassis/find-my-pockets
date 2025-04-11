@@ -20,7 +20,8 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
-      { url: "/icon.png", type: "image/png" }
+      { url: "/FMP_Laranja_Centered.svg", type: "image/svg+xml" },
+      { url: "/icon.png", type: "image/png", sizes: "192x192" }
     ],
     apple: { url: "/apple-icon.png", type: "image/png" },
   }
@@ -35,8 +36,10 @@ export default function RootLayout({
     <html lang="pt-BR">
       <head>
         <link rel="icon" href="/favicon.ico" sizes="any" />
-        <link rel="icon" href="/icon.png" type="image/png" />
+        <link rel="icon" href="/FMP_Laranja_Centered.svg" type="image/svg+xml" />
+        <link rel="icon" href="/icon.png" type="image/png" sizes="192x192" />
         <link rel="apple-touch-icon" href="/apple-icon.png" />
+        <link rel="stylesheet" href="/pockets-logo-style.css" />
         <Script id="google-maps-guard" strategy="beforeInteractive">
           {`
             // Prevent multiple initializations of Google Maps

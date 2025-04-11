@@ -7,6 +7,8 @@ import { normalizeText } from '../lib/utils';
 import dynamic from 'next/dynamic';
 import { MapRef } from '@/components/Map';
 import SearchResults from '@/components/SearchResults';
+import Link from 'next/link';
+import Image from 'next/image';
 
 // Modern font selection with better combinations
 import { Inter, Poppins, Plus_Jakarta_Sans, Space_Grotesk } from 'next/font/google';
@@ -1165,18 +1167,71 @@ export default function Home() {
 
   // Update the return statement for consistent rendering
   return (
-    <main className={`min-h-screen bg-gradient-to-b from-[#fff8f6] to-[#fff0eb] flex flex-col ${plusJakarta.variable} ${spaceGrotesk.variable} ${inter.variable} ${poppins.variable}`}>
+    <main className={`min-h-screen bg-gradient-to-b from-[#fff8f6] to-[#fff0eb] flex flex-col ${plusJakarta.variable} ${spaceGrotesk.variable} ${inter.variable} ${poppins.variable} relative`}>
+      {/* Absolutely positioned logos in the top corners - improved responsive sizing */}
+      <div className="absolute top-4 left-4 md:top-6 md:left-6 z-20">
+        {/* Find My Pockets Logo - Left top corner */}
+        <div className="w-20 sm:w-24 md:w-[8.4rem] lg:w-[9.8rem] h-auto">
+          <div 
+            className="w-full h-full"
+            style={{
+              background: 'linear-gradient(to right, #FF6242, #FF7D67)',
+              WebkitMaskImage: 'url(/FMP_LaranjaGradient.svg)',
+              WebkitMaskSize: 'contain',
+              WebkitMaskRepeat: 'no-repeat',
+              WebkitMaskPosition: 'center',
+              maskImage: 'url(/FMP_LaranjaGradient.svg)',
+              maskSize: 'contain',
+              maskRepeat: 'no-repeat',
+              maskPosition: 'center'
+            }}
+          >
+            <img 
+              src="/FMP_LaranjaGradient.svg" 
+              alt="Find My Pockets Logo"
+              className="opacity-0 w-full h-auto" 
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="absolute top-4 right-4 md:top-6 md:right-6 z-20">
+        {/* Dunamis Pockets Logo - Right top corner */}
+        <div className="w-20 sm:w-24 md:w-[8.4rem] lg:w-[9.8rem] h-auto">
+          <div 
+            className="w-full h-full"
+            style={{
+              background: 'linear-gradient(to right, #FF6242, #FF7D67)',
+              WebkitMaskImage: 'url(/pockets-logo.svg)',
+              WebkitMaskSize: 'contain',
+              WebkitMaskRepeat: 'no-repeat',
+              WebkitMaskPosition: 'center',
+              maskImage: 'url(/pockets-logo.svg)',
+              maskSize: 'contain',
+              maskRepeat: 'no-repeat',
+              maskPosition: 'center'
+            }}
+          >
+            <img 
+              src="/pockets-logo.svg" 
+              alt="Dunamis Pockets Logo"
+              className="opacity-0 w-full h-auto" 
+            />
+          </div>
+        </div>
+      </div>
+
       {/* Use stable gradient classes that are consistent between server/client */}
       <div className="bg-dunamis-gradient text-white relative overflow-hidden">
         {/* Enhanced decorative elements with more depth and visual interest */}
         <div className="absolute inset-0">
           {/* Primary glow elements - increased blur radius and size */}
           <div className="absolute top-[-40%] left-[-15%] w-[90%] h-[90%] bg-purple-900/40 rounded-full filter blur-[180px] opacity-50 animate-pulse-slow"></div>
-          <div className="absolute bottom-[-20%] right-[-10%] w-[80%] h-[80%] bg-primary/30 rounded-full filter blur-[200px] opacity-40 animate-pulse-slower"></div>
+          <div className="absolute bottom-[-20%] right-[-10%] w-[80%] h-[80%] bg-[#FF6242]/30 rounded-full filter blur-[200px] opacity-40 animate-pulse-slower"></div>
           
           {/* Secondary glow elements */}
           <div className="absolute top-[5%] right-[10%] w-[60%] h-[60%] bg-purple-800/30 rounded-full filter blur-[150px] opacity-40 animate-pulse-slow" style={{ animationDelay: '-4s' }}></div>
-          <div className="absolute bottom-[10%] left-[5%] w-[50%] h-[50%] bg-primary/25 rounded-full filter blur-[130px] opacity-35 animate-pulse-slower" style={{ animationDelay: '-6s' }}></div>
+          <div className="absolute bottom-[10%] left-[5%] w-[50%] h-[50%] bg-[#FF7D67]/25 rounded-full filter blur-[130px] opacity-35 animate-pulse-slower" style={{ animationDelay: '-6s' }}></div>
           
           {/* Additional violet blurs for more depth and variation */}
           <div className="absolute top-[30%] left-[35%] w-[70%] h-[70%] bg-purple-900/30 rounded-full filter blur-[170px] opacity-35 animate-float-subtle" style={{ animationDelay: '-3s' }}></div>
@@ -1189,13 +1244,17 @@ export default function Home() {
           {/* Central glowing element */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[60%] h-[60%] bg-purple-900/20 rounded-full filter blur-[130px] opacity-40 animate-pulse-slower"></div>
           
-          {/* Subtle moving highlights */}
+          {/* Subtle moving highlights - enhanced orange accents */}
           <div className="absolute top-[20%] left-[20%] w-[25%] h-[25%] bg-white/5 rounded-full filter blur-[70px] animate-float-subtle"></div>
-          <div className="absolute bottom-[25%] right-[25%] w-[20%] h-[20%] bg-primary/20 rounded-full filter blur-[60px] animate-float-subtle" style={{ animationDelay: '-7s' }}></div>
+          <div className="absolute bottom-[25%] right-[25%] w-[20%] h-[20%] bg-[#FF6242]/20 rounded-full filter blur-[60px] animate-float-subtle" style={{ animationDelay: '-7s' }}></div>
           
-          {/* Orange accent elements */}
-          <div className="absolute top-[40%] right-[15%] w-[30%] h-[30%] bg-primary/15 rounded-full filter blur-[90px] opacity-30 animate-float-subtle" style={{ animationDelay: '-9s' }}></div>
-          <div className="absolute bottom-[15%] left-[40%] w-[20%] h-[20%] bg-[#ff7a59]/15 rounded-full filter blur-[80px] opacity-25 animate-float-subtle" style={{ animationDelay: '-4s' }}></div>
+          {/* Orange accent elements - enhanced and more consistent */}
+          <div className="absolute top-[40%] right-[15%] w-[30%] h-[30%] bg-[#FF7D67]/15 rounded-full filter blur-[90px] opacity-30 animate-float-subtle" style={{ animationDelay: '-9s' }}></div>
+          <div className="absolute bottom-[15%] left-[40%] w-[20%] h-[20%] bg-[#FF6A50]/15 rounded-full filter blur-[80px] opacity-25 animate-float-subtle" style={{ animationDelay: '-4s' }}></div>
+          
+          {/* Additional orange glow elements */}
+          <div className="absolute top-[60%] right-[35%] w-[45%] h-[25%] bg-[#FF6242]/10 rounded-full filter blur-[120px] opacity-30 animate-float-subtle" style={{ animationDelay: '-2s' }}></div>
+          <div className="absolute bottom-[45%] left-[15%] w-[30%] h-[30%] bg-[#FF7D67]/12 rounded-full filter blur-[100px] opacity-25 animate-float-subtle" style={{ animationDelay: '-10s' }}></div>
           
           {/* Subtle overlay pattern for texture */}
           <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1IiBoZWlnaHQ9IjUiPgo8cmVjdCB3aWR0aD0iNSIgaGVpZ2h0PSI1IiBmaWxsPSIjZmZmIiBmaWxsLW9wYWNpdHk9IjAuMDIiPjwvcmVjdD4KPC9zdmc+')] opacity-15"></div>
@@ -1204,21 +1263,23 @@ export default function Home() {
           <div className="absolute inset-0 bg-gradient-radial from-transparent to-black/20 opacity-30"></div>
         </div>
         
-        <div className="max-w-7xl mx-auto w-full px-4 md:px-6 py-14 md:py-20 relative z-10">
+        <div className="max-w-7xl mx-auto w-full px-4 md:px-6 pt-20 pb-14 md:py-20 relative z-10">
           <div className="max-w-3xl mx-auto text-center mb-10">
-            <div className="inline-flex items-center justify-center mb-6 bg-white/5 backdrop-blur-sm px-4 py-1.5 rounded-full border border-white/10 shadow-sm">
+            {/* Logo Section - Removed and repositioned to top corners */}
+            <div className="inline-flex items-center justify-center mb-6 bg-white/5 backdrop-blur-sm px-4 py-1.5 rounded-full border border-white/10 shadow-sm mt-6 sm:mt-0">
               <span className="h-2 w-2 bg-primary rounded-full mr-2"></span>
-              <span className="text-xs text-white font-medium tracking-wide uppercase">Encontre sua comunidade</span>
+              <span className="text-xs text-white font-medium tracking-wide uppercase">Encontre um polo de avivamento na sua universidade</span>
             </div>
-            <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold mb-5 tracking-tight font-space-grotesk leading-none">
-              Encontre <span className="text-transparent bg-clip-text bg-dunamis-orange relative inline-block">
-                Dunamis Pockets
-                <span className="absolute inset-0 bg-primary/20 blur-xl opacity-30 -z-10 rounded-full animate-pulse-slow"></span>
-              </span>
+            <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold mb-5 tracking-tight font-space-grotesk leading-none text-center">
+              {/* Mobile: Two lines, Desktop: Single line */}
+              <div className="md:whitespace-nowrap">
+                <span className="block md:inline">Encontre um </span>
+                <span className="block md:inline text-transparent bg-clip-text bg-gradient-to-r from-[#FF6242] to-[#FF7D67] relative">
+                  Dunamis Pockets
+                  <span className="absolute inset-0 bg-[#FF6242]/20 blur-xl opacity-40 -z-10 rounded-full animate-pulse-slow"></span>
+                </span>
+              </div>
             </h1>
-            <p className="text-md md:text-lg text-white/80 max-w-2xl mx-auto leading-relaxed font-light">
-              Conecte-se com grupos universitários em todo o Brasil e encontre sua comunidade onde quer que você esteja.
-            </p>
           </div>
 
           <div className="max-w-2xl mx-auto">
@@ -1277,7 +1338,7 @@ export default function Home() {
                     )}
                     <button
                       type="submit"
-                      className="absolute right-0 h-full px-6 bg-primary text-white font-medium flex items-center justify-center hover:opacity-90 transition-all duration-300 rounded-r-2xl"
+                      className="absolute right-0 h-full px-6 bg-gradient-to-r from-[#FF6242] to-[#FF7D67] text-white font-medium flex items-center justify-center hover:opacity-90 transition-all duration-300 rounded-r-2xl"
                       disabled={isLoading}
                       aria-label="Pesquisar"
                     >
@@ -1436,7 +1497,7 @@ export default function Home() {
                         }
                       }, 1000);
                     }}
-                    className="px-5 py-2.5 bg-primary/90 text-white rounded-full text-sm font-medium shadow-lg hover:bg-primary transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary/50 border border-primary/20 flex items-center backdrop-blur-sm"
+                    className="px-5 py-2.5 bg-gradient-to-r from-[#FF6242] to-[#FF7D67] text-white rounded-full text-sm font-medium shadow-lg hover:opacity-95 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-[#FF6242]/50 border border-[#FF6242]/20 flex items-center backdrop-blur-sm"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1499,12 +1560,12 @@ export default function Home() {
             {/* Mobile View Controls - only show on client */}
             {isClient && (
               <div className="md:hidden flex justify-center mb-6">
-                <div className="inline-flex rounded-xl bg-white/80 backdrop-blur-sm p-1 shadow-md border border-[#ffd0c2]">
+                <div className="inline-flex rounded-xl bg-white/80 backdrop-blur-sm p-1 shadow-md border border-[#FF7D67]/20">
                   <button
                     onClick={() => setMobileView('map')}
                     className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 ${
                       mobileView === 'map'
-                        ? 'bg-dunamis-gradient text-white shadow-sm'
+                        ? 'bg-gradient-to-r from-[#FF6242] to-[#FF7D67] text-white shadow-sm'
                         : 'text-gray-600 hover:bg-gray-50'
                     }`}
                   >
@@ -1519,7 +1580,7 @@ export default function Home() {
                     onClick={() => setMobileView('list')}
                     className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 ${
                       mobileView === 'list'
-                        ? 'bg-dunamis-gradient text-white shadow-sm'
+                        ? 'bg-gradient-to-r from-[#FF6242] to-[#FF7D67] text-white shadow-sm'
                         : 'text-gray-600 hover:bg-gray-50'
                     }`}
                   >
@@ -1536,7 +1597,7 @@ export default function Home() {
 
             {/* Results Summary Bar */}
             <div className="mb-6">
-              <div className="bg-white/70 backdrop-blur-sm rounded-xl p-4 shadow-sm border border-[#ffd0c2] flex items-center justify-between">
+              <div className="bg-white/70 backdrop-blur-sm rounded-xl p-4 shadow-sm border border-[#FF7D67]/20 flex items-center justify-between">
                 <div className="flex items-center">
                   <span className="text-sm font-medium text-gray-800">
                     {searchResults.length === 0 ? (
@@ -1547,7 +1608,7 @@ export default function Home() {
                   </span>
                   {searchTerm && (
                     <span className="ml-2 text-sm text-gray-500">
-                      para <span className="font-medium text-primary">{searchTerm}</span>
+                      para <span className="font-medium text-[#FF6242]">{searchTerm}</span>
                     </span>
                   )}
                 </div>
@@ -1576,12 +1637,12 @@ export default function Home() {
                         selectedGroupId={selectedGroupId}
                       />
                     ) : (
-                      <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-[#ffd0c2] p-10 text-center">
+                      <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-[#FF7D67]/20 p-10 text-center">
                         <div className="w-16 h-16 bg-[#fff0eb] rounded-full flex items-center justify-center mx-auto mb-5">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-[#ff7a59]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-[#FF6242]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                           </svg>
-                        </div>
+            </div>
                         <h3 className="text-xl font-semibold text-gray-900 mb-3">Nenhum resultado encontrado</h3>
                         <p className="text-gray-600 max-w-xs mx-auto">Tente outras palavras-chave ou explore os filtros rápidos acima para encontrar grupos.</p>
                       </div>
@@ -1594,7 +1655,7 @@ export default function Home() {
               <div className={`${(isClient && (mobileView === 'map' || !checkMobileView())) ? 'block' : 'hidden'} md:block order-1 md:order-2 h-[65vh] md:h-[75vh] relative`} ref={mapContainerRef}>
                 {/* Only render on client to avoid hydration issues */}
                 {isClient && (
-                  <div className="h-full rounded-2xl overflow-hidden shadow-xl border border-[#ffd0c2] bg-white/70 backdrop-blur-sm">
+                  <div className="h-full rounded-2xl overflow-hidden shadow-xl border border-[#FF7D67]/30 bg-white/70 backdrop-blur-sm">
                     <MapComponent
                       ref={mapRef}
                       groups={searchResults.length > 0 ? searchResults : allGroups}

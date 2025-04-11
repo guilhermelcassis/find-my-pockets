@@ -34,7 +34,11 @@ export function DashboardNav() {
   return (
     <nav className="flex items-center justify-between px-6 py-4 bg-white shadow-sm mb-8">
       <div className="flex items-center space-x-2">
-        <span className="text-xl font-bold">Find My Pockets</span>
+        <img 
+          src="/FMP_Roxo.svg" 
+          alt="Find My Pockets" 
+          className="h-8 w-auto"
+        />
         <span className="text-sm px-2 py-1 bg-blue-100 text-blue-800 rounded-md">Dashboard</span>
       </div>
       
