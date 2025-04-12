@@ -1866,7 +1866,7 @@ export default function Home() {
                   />
                   
                   {/* Floating controls */}
-                  <div className="absolute bottom-6 right-6 z-10 flex flex-col gap-3">
+                  <div className="absolute bottom-6 left-6 z-10 flex flex-col gap-3">
                     {/* Find my location button */}
                     <button
                       onClick={() => {
