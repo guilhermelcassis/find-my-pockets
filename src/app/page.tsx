@@ -1805,20 +1805,28 @@ export default function Home() {
             {/* List Column - Only render on client to avoid hydration issues */}
             {isClient && (
               <div className={`${mobileView === 'list' || !checkMobileView() ? 'block' : 'hidden'} md:block order-2 md:order-1`}>
-                <div ref={resultsContainerRef} className="h-full flex flex-col">
+                <div ref={resultsContainerRef} className="h-full flex flex-col md:max-h-[75vh] md:overflow-hidden">
                   {searchResults.length > 0 ? (
-                    <SearchResults
-                      searchResults={searchResults}
-                      handleResultClick={handleResultClick}
-                      selectedGroupId={selectedGroupId}
-                    />
+                    <div className="flex flex-col h-full overflow-hidden">
+                      <div className="bg-white/90 backdrop-blur-sm rounded-t-2xl shadow-lg border border-[#FF7D67]/20 p-4">
+                        <h2 className="text-lg font-medium text-gray-900">Grupos disponíveis</h2>
+                        <p className="text-sm text-gray-500">Selecione um grupo para ver detalhes</p>
+                      </div>
+                      <div className="flex-1 overflow-y-auto custom-scrollbar">
+                        <SearchResults
+                          searchResults={searchResults}
+                          handleResultClick={handleResultClick}
+                          selectedGroupId={selectedGroupId}
+                        />
+                      </div>
+                    </div>
                   ) : (
                     <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-[#FF7D67]/20 p-10 text-center">
                       <div className="w-16 h-16 bg-[#fff0eb] rounded-full flex items-center justify-center mx-auto mb-5">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-[#FF6242]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                         </svg>
-          </div>
+                      </div>
                       <h3 className="text-xl font-semibold text-gray-900 mb-3">Nenhum resultado encontrado</h3>
                       <p className="text-gray-600 max-w-xs mx-auto">Tente outras palavras-chave ou explore os filtros rápidos acima para encontrar grupos.</p>
                     </div>

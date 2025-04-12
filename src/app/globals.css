@@ -324,3 +324,29 @@
     background-image: radial-gradient(var(--tw-gradient-stops));
   }
 }
+
+/* Custom scrollbar styles for the list column */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(241, 241, 241, 0.5);
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 98, 66, 0.3);
+  border-radius: 4px;
+  transition: background-color 0.3s ease;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 98, 66, 0.5);
+}
+
+/* For Firefox */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 98, 66, 0.3) rgba(241, 241, 241, 0.5);
+}
