@@ -99,7 +99,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingInitial, setIsLoadingInitial] = useState(true);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
+  const [hasSearched, setHasSearched] = useState(true); // Changed to true to auto-display the map
   const [mapKey, setMapKey] = useState(0);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [isTyping, setIsTyping] = useState(false);
@@ -300,18 +300,57 @@ export default function Home() {
   useEffect(() => {
     const fetchAllGroups = async () => {
       try {
-        // Updated query to only fetch active groups
+        console.log("Fetching all groups...");
         const { data, error } = await supabase
           .from('groups')
           .select('*')
-          .eq('active', true);
+          .eq('active', true)
+          .order('university', { ascending: true });
         
-        if (error) throw error;
+        if (error) {
+          console.error("Error fetching groups:", error);
+          return;
+        }
         
-        setAllGroups(data as Group[]);
+        console.log(`Fetched ${data.length} groups`);
+        const activeGroups = data as Group[];
+        
+        // Set all the states just like the "Mostrar todos os Pockets" button does
+        setAllGroups(activeGroups);
+        setFilteredGroups(activeGroups);
+        setSearchResults(activeGroups);
+        setHasSearched(true);
+        setIsLoadingInitial(false);
+        
+        // Force map to update and fit all markers
+        setMapKey(prevKey => prevKey + 1);
+        
+        // Multiple attempts to fit bounds with increasing delays to ensure markers are loaded
+        // First attempt - short delay
+        setTimeout(() => {
+          if (mapRef.current) {
+            console.log("Initial fit bounds to all markers");
+            mapRef.current.fitBoundsToMarkers();
+          }
+        }, 200);
+        
+        // Second attempt - medium delay
+        setTimeout(() => {
+          if (mapRef.current) {
+            console.log("Second attempt to fit bounds to all markers");
+            mapRef.current.fitBoundsToMarkers();
+          }
+        }, 500);
+        
+        // Third attempt - longer delay for reliability
+        setTimeout(() => {
+          if (mapRef.current) {
+            console.log("Final attempt to fit bounds to all markers");
+            mapRef.current.fitBoundsToMarkers();
+          }
+        }, 1000);
       } catch (error) {
-        console.error("Erro ao buscar grupos ativos:", error);
-      } finally {
+        console.error("Error in fetchAllGroups:", error);
         setIsLoadingInitial(false);
       }
     };
@@ -1690,47 +1729,48 @@ export default function Home() {
 
       {/* Content area */}
       <div className="flex-1 w-full max-w-7xl mx-auto px-4 py-8 md:py-12">
-        {hasSearched && (
-          <>
-            {/* Mobile View Controls - only show on client */}
-            {isClient && (
-              <div className="md:hidden flex justify-center mb-6">
-                <div className="inline-flex rounded-xl bg-white/80 backdrop-blur-sm p-1 shadow-md border border-[#FF7D67]/20">
-                  <button
-                    onClick={() => setMobileView('map')}
-                    className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 ${
-                      mobileView === 'map'
-                        ? 'bg-gradient-to-r from-[#FF6242] to-[#FF7D67] text-white shadow-sm'
-                        : 'text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span className="flex items-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-                      </svg>
-                      Mapa
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => setMobileView('list')}
-                    className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 ${
-                      mobileView === 'list'
-                        ? 'bg-gradient-to-r from-[#FF6242] to-[#FF7D67] text-white shadow-sm'
-                        : 'text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span className="flex items-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                      </svg>
-                      Lista
-                    </span>
-                  </button>
-                </div>
+        {/* Always show the map section regardless of search state */}
+        <>
+          {/* Mobile View Controls - only show on client */}
+          {isClient && (
+            <div className="md:hidden flex justify-center mb-6">
+              <div className="inline-flex rounded-xl bg-white/80 backdrop-blur-sm p-1 shadow-md border border-[#FF7D67]/20">
+                <button
+                  onClick={() => setMobileView('map')}
+                  className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 ${
+                    mobileView === 'map'
+                      ? 'bg-gradient-to-r from-[#FF6242] to-[#FF7D67] text-white shadow-sm'
+                      : 'text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  <span className="flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                    </svg>
+                    Mapa
+                  </span>
+                </button>
+                <button
+                  onClick={() => setMobileView('list')}
+                  className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 ${
+                    mobileView === 'list'
+                      ? 'bg-gradient-to-r from-[#FF6242] to-[#FF7D67] text-white shadow-sm'
+                      : 'text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  <span className="flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                    </svg>
+                    Lista
+                  </span>
+                </button>
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Results Summary Bar */}
+          {/* Results Summary Bar - Only show if there are search results */}
+          {searchResults.length > 0 && (
             <div className="mb-6">
               <div className="bg-white/70 backdrop-blur-sm rounded-xl p-4 shadow-sm border border-[#FF7D67]/20 flex items-center justify-between">
                 <div className="flex items-center">
@@ -1758,57 +1798,58 @@ export default function Home() {
                 )}
               </div>
             </div>
+          )}
 
-            {/* Results Grid - Responsive Layout */}
-            <div className={`grid ${isClient ? 'md:grid-cols-[380px,1fr]' : ''} gap-6`}>
-              {/* List Column - Only render on client to avoid hydration issues */}
+          {/* Results Grid - Responsive Layout */}
+          <div className={`grid ${isClient ? 'md:grid-cols-[380px,1fr]' : ''} gap-6`}>
+            {/* List Column - Only render on client to avoid hydration issues */}
+            {isClient && (
+              <div className={`${mobileView === 'list' || !checkMobileView() ? 'block' : 'hidden'} md:block order-2 md:order-1`}>
+                <div ref={resultsContainerRef} className="h-full flex flex-col">
+                  {searchResults.length > 0 ? (
+                    <SearchResults
+                      searchResults={searchResults}
+                      handleResultClick={handleResultClick}
+                      selectedGroupId={selectedGroupId}
+                    />
+                  ) : (
+                    <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-[#FF7D67]/20 p-10 text-center">
+                      <div className="w-16 h-16 bg-[#fff0eb] rounded-full flex items-center justify-center mx-auto mb-5">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-[#FF6242]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+          </div>
+                      <h3 className="text-xl font-semibold text-gray-900 mb-3">Nenhum resultado encontrado</h3>
+                      <p className="text-gray-600 max-w-xs mx-auto">Tente outras palavras-chave ou explore os filtros rápidos acima para encontrar grupos.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Map Column - Always display */}
+            <div className={`${(isClient && (mobileView === 'map' || !checkMobileView())) ? 'block' : 'hidden'} md:block order-1 md:order-2 h-[65vh] md:h-[75vh] relative`} ref={mapContainerRef}>
+              {/* Only render on client to avoid hydration issues */}
               {isClient && (
-                <div className={`${mobileView === 'list' || !checkMobileView() ? 'block' : 'hidden'} md:block order-2 md:order-1`}>
-                  <div ref={resultsContainerRef} className="h-full flex flex-col">
-                    {searchResults.length > 0 ? (
-                      <SearchResults
-                        searchResults={searchResults}
-                        handleResultClick={handleResultClick}
-                        selectedGroupId={selectedGroupId}
-                      />
-                    ) : (
-                      <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-[#FF7D67]/20 p-10 text-center">
-                        <div className="w-16 h-16 bg-[#fff0eb] rounded-full flex items-center justify-center mx-auto mb-5">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-[#FF6242]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                          </svg>
-            </div>
-                        <h3 className="text-xl font-semibold text-gray-900 mb-3">Nenhum resultado encontrado</h3>
-                        <p className="text-gray-600 max-w-xs mx-auto">Tente outras palavras-chave ou explore os filtros rápidos acima para encontrar grupos.</p>
-                      </div>
-                    )}
-                  </div>
+                <div className="h-full rounded-2xl overflow-hidden shadow-xl border border-[#FF7D67]/30 bg-white/70 backdrop-blur-sm">
+                  <MapComponent
+                    ref={mapRef}
+                    groups={searchResults.length > 0 ? searchResults : allGroups}
+                    selectedGroupId={selectedGroupId}
+                    onMarkerClick={(groupId) => {
+                      // Handle marker click logic
+                      setSelectedGroupId(groupId);
+                      handleResultClick(groupId);
+                    }}
+                    height="100%"
+                    key={mapKey}
+                    enableClustering={false}
+                  />
                 </div>
               )}
-
-              {/* Map Column */}
-              <div className={`${(isClient && (mobileView === 'map' || !checkMobileView())) ? 'block' : 'hidden'} md:block order-1 md:order-2 h-[65vh] md:h-[75vh] relative`} ref={mapContainerRef}>
-                {/* Only render on client to avoid hydration issues */}
-                {isClient && (
-                  <div className="h-full rounded-2xl overflow-hidden shadow-xl border border-[#FF7D67]/30 bg-white/70 backdrop-blur-sm">
-                    <MapComponent
-                      ref={mapRef}
-                      groups={searchResults.length > 0 ? searchResults : allGroups}
-                      selectedGroupId={selectedGroupId}
-                      onMarkerClick={(groupId) => {
-                        // Update UI
-                        setSelectedGroupId(groupId);
-                        // Don't switch to list view on mobile when a marker is clicked
-                        // User wants to stay on the map view
-                      }}
-                      height="100%"
-                    />
-                  </div>
-                )}
-              </div>
             </div>
-          </>
-        )}
+          </div>
+        </>
       </div>
 
       {/* Footer */}
