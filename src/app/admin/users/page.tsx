@@ -272,10 +272,6 @@ export default function AdminUsersPage() {
             </div>
           </div>
         </div>
-        
-        <div>
-          <InviteUserForm onSuccess={handleInviteSuccess} />
-        </div>
       </div>
     </div>
   );
