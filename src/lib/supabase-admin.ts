@@ -50,13 +50,48 @@ export const verifyAdmin = async (accessToken: string) => {
       };
     }
 
-    // Check if user has admin role in metadata
-    const isAdmin = data.user.user_metadata?.admin === true;
+    const userId = data.user.id;
+
+    // First check the user_roles table - this is the primary source of truth
+    const { data: roleData, error: roleError } = await adminDb
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', userId)
+      .single();
+
+    // If we found a role record and it's 'admin', user is an admin
+    if (!roleError && roleData?.role === 'admin') {
+      return {
+        isAuthenticated: true,
+        isAdmin: true,
+        uid: userId
+      };
+    }
+
+    // Fallback to check if user has admin role in metadata
+    // This is for backward compatibility
+    const isAdminInMetadata = data.user.user_metadata?.admin === true;
+    
+    // If user has admin in metadata but not in the roles table,
+    // let's update the roles table to reflect this
+    if (isAdminInMetadata && (roleError || roleData?.role !== 'admin')) {
+      // Update or insert admin role
+      await adminDb
+        .from('user_roles')
+        .upsert({ 
+          user_id: userId,
+          role: 'admin',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+      
+      console.log(`Updated user ${userId} to admin based on metadata`);
+    }
     
     return { 
       isAuthenticated: true,
-      isAdmin,
-      uid: data.user.id
+      isAdmin: isAdminInMetadata,
+      uid: userId
     };
   } catch (error) {
     console.error('Error verifying auth token:', error);

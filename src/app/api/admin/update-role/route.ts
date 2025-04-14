@@ -56,6 +56,7 @@ export async function POST(request: NextRequest) {
         .insert({ 
           user_id: userId,
           role,
+          created_at: metadata.updated_at,
           ...metadata
         });
     }
@@ -64,6 +65,31 @@ export async function POST(request: NextRequest) {
       console.error('Error updating user role:', result.error);
       return NextResponse.json(
         { error: 'Error updating user role', details: result.error.message },
+        { status: 500 }
+      );
+    }
+
+    // ALSO UPDATE USER METADATA - This is crucial for some auth checks
+    // Only set admin flag in metadata if role is 'admin'
+    const isAdminRole = role === 'admin';
+    const { error: userUpdateError } = await adminDb.auth.admin.updateUserById(
+      userId,
+      { 
+        user_metadata: { 
+          admin: isAdminRole,
+          role: role
+        } 
+      }
+    );
+
+    if (userUpdateError) {
+      console.error('Error updating user metadata:', userUpdateError);
+      return NextResponse.json(
+        { 
+          error: 'Role updated in database but failed to update user metadata', 
+          details: userUpdateError.message,
+          partialSuccess: true
+        },
         { status: 500 }
       );
     }
