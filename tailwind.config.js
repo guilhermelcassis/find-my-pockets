@@ -59,10 +59,6 @@ module.exports = {
           800: '#104e85',
           900: '#13426f',
         },
-        'whatsapp': {
-          DEFAULT: '#25D366',
-          dark: '#128C7E',
-        },
         'instagram': {
           light: '#F56040',
           DEFAULT: '#C13584',

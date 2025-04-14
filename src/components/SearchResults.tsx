@@ -130,21 +130,6 @@ const SearchResults: React.FC<SearchResultsProps> = ({
                   
                   {/* Action buttons row */}
                   <div className="flex justify-end gap-1 mt-2">
-                    {group.leader && group.leader.phone && (
-                      <a 
-                        href={`https://wa.me/55${group.leader.phone.replace(/\D/g, '')}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center justify-center p-2 rounded-lg bg-green-50 text-green-600 transition-all duration-200 hover:bg-green-500 hover:text-white"
-                        onClick={(e) => e.stopPropagation()}
-                        aria-label="Contato via WhatsApp"
-                      >
-                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
-                        </svg>
-                      </a>
-                    )}
-                    
                     {group.instagram && (
                       <a 
                         href={`https://instagram.com/${group.instagram.replace('@', '')}`}
