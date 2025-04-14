@@ -1,15 +1,40 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 
+// Create a separate client component for the search params section
+const QueryParamsDisplay = () => {
+  const searchParams = useSearchParams();
+  
+  // Format JSON for display
+  const formatJson = (json: any) => {
+    return JSON.stringify(json, null, 2);
+  };
+  
+  return (
+    <>
+      <h2 className="text-lg font-semibold text-purple-800 mb-4">Query Parameters</h2>
+      <pre className="bg-gray-100 p-4 rounded-lg text-sm overflow-auto max-h-60 mb-8">
+        {formatJson(
+          searchParams 
+            ? Object.fromEntries(
+                Array.from(searchParams.entries())
+              ) 
+            : {}
+        )}
+      </pre>
+    </>
+  );
+};
+
+// Main component that doesn't directly use useSearchParams
 export default function AuthDebugPage() {
   const [session, setSession] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const searchParams = useSearchParams();
 
   useEffect(() => {
     async function loadSession() {
@@ -51,16 +76,10 @@ export default function AuthDebugPage() {
           </div>
           
           <div className="p-6">
-            <h2 className="text-lg font-semibold text-purple-800 mb-4">Query Parameters</h2>
-            <pre className="bg-gray-100 p-4 rounded-lg text-sm overflow-auto max-h-60 mb-8">
-              {formatJson(
-                searchParams 
-                  ? Object.fromEntries(
-                      Array.from(searchParams.entries())
-                    ) 
-                  : {}
-              )}
-            </pre>
+            {/* Wrap the component using useSearchParams in a Suspense boundary */}
+            <Suspense fallback={<div className="p-4 text-gray-500">Loading query parameters...</div>}>
+              <QueryParamsDisplay />
+            </Suspense>
             
             <h2 className="text-lg font-semibold text-purple-800 mb-4">Current Session</h2>
             {loading ? (

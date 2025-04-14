@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '../../lib/auth-context';
 import { supabase } from '../../lib/supabase';
 
-export default function ResetPasswordPage() {
+// Separate client component that uses useSearchParams
+const ResetPasswordForm = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
@@ -14,19 +15,14 @@ export default function ResetPasswordPage() {
   const [success, setSuccess] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { resetPassword } = useAuth();
 
   // Check for token in URL (Supabase format, not Firebase oobCode)
   const token = searchParams?.get('token') || '';
   const type = searchParams?.get('type') || '';
 
-  useEffect(() => {
-    // Validate if we have valid recovery parameters
-    if (!token || type !== 'recovery') {
-      setError('O link de recuperação é inválido ou está expirado. Por favor, solicite um novo link de redefinição de senha.');
-    }
-  }, [token, type]);
-
+  // Validate if we have valid recovery parameters
+  const hasValidParams = Boolean(token && type === 'recovery');
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -82,6 +78,133 @@ export default function ResetPasswordPage() {
     }
   };
 
+  if (!hasValidParams) {
+    return (
+      <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm animate-pulse">
+        <div className="flex items-center">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+          </svg>
+          O link de recuperação é inválido ou está expirado. Por favor, solicite um novo link de redefinição de senha.
+        </div>
+        <div className="mt-4">
+          <Link 
+            href="/forgot-password"
+            className="inline-block px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 font-medium rounded-lg transition-colors"
+          >
+            Solicitar novo link
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm animate-pulse">
+          <div className="flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            {error}
+          </div>
+        </div>
+      )}
+      
+      {success ? (
+        <div className="space-y-6">
+          <div className="bg-green-50 border border-green-200 text-green-600 px-4 py-3 rounded-lg text-sm">
+            <div className="flex items-center">
+              <svg className="h-5 w-5 text-green-500 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+              <p>Sua senha foi redefinida com sucesso! Você será redirecionado para a página de login em instantes.</p>
+            </div>
+          </div>
+          <div className="text-center py-4">
+            <div className="inline-block animate-spin h-8 w-8 border-4 border-purple-200 rounded-full border-t-purple-600"></div>
+            <p className="mt-2 text-purple-600 font-medium">Redirecionando...</p>
+          </div>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div>
+            <label htmlFor="password" className="block text-base font-medium text-purple-800 mb-2">Nova Senha</label>
+            <div className="relative">
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="block w-full px-4 py-3 border border-purple-200 rounded-xl shadow-sm bg-white/80 input-focus-color transition-colors"
+                placeholder="********"
+                required
+              />
+              <div className="absolute inset-y-0 right-0 pr-3 flex items-center text-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-purple-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                </svg>
+              </div>
+            </div>
+            <p className="mt-1 text-sm text-purple-600">Mínimo de 6 caracteres</p>
+          </div>
+          
+          <div>
+            <label htmlFor="confirmPassword" className="block text-base font-medium text-purple-800 mb-2">Confirmar Nova Senha</label>
+            <div className="relative">
+              <input
+                id="confirmPassword"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="block w-full px-4 py-3 border border-purple-200 rounded-xl shadow-sm bg-white/80 input-focus-color transition-colors"
+                placeholder="********"
+                required
+              />
+              <div className="absolute inset-y-0 right-0 pr-3 flex items-center text-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-purple-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                </svg>
+              </div>
+            </div>
+          </div>
+          
+          <button
+            type="submit"
+            disabled={isLoading || !token}
+            className={`w-full py-3 rounded-xl font-semibold text-white shadow-lg transition-all auth-button-gradient ${
+              isLoading || !token
+                ? 'opacity-70 cursor-not-allowed' 
+                : 'hover:shadow-xl hover:-translate-y-0.5'
+            }`}
+          >
+            {isLoading ? (
+              <div className="flex items-center justify-center">
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                Redefinindo...
+              </div>
+            ) : (
+              'Redefinir Senha'
+            )}
+          </button>
+          
+          <div className="mt-6 text-center">
+            <p className="text-purple-700">
+              Lembrou sua senha?{' '}
+              <Link href="/login" className="text-violet-600 hover:text-violet-700 font-medium transition-colors">
+                Voltar para login
+              </Link>
+            </p>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+};
+
+// Main component that doesn't directly use useSearchParams
+export default function ResetPasswordPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-purple-200 via-purple-100 to-purple-50">
       <style jsx global>{`
@@ -158,104 +281,10 @@ export default function ResetPasswordPage() {
           </div>
           
           <div className="p-8 space-y-6 bg-gradient-to-b from-white/60 to-purple-50/60">
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm animate-pulse">
-                <div className="flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-red-500" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                  </svg>
-                  {error}
-                </div>
-              </div>
-            )}
-            
-            {success ? (
-              <div className="space-y-6">
-                <div className="bg-green-50 border border-green-200 text-green-600 px-4 py-3 rounded-lg text-sm">
-                  <div className="flex items-center">
-                    <svg className="h-5 w-5 text-green-500 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <p>Sua senha foi redefinida com sucesso! Você será redirecionado para a página de login em instantes.</p>
-                  </div>
-                </div>
-                <div className="text-center py-4">
-                  <div className="inline-block animate-spin h-8 w-8 border-4 border-purple-200 rounded-full border-t-purple-600"></div>
-                  <p className="mt-2 text-purple-600 font-medium">Redirecionando...</p>
-                </div>
-              </div>
-            ) : (
-              <form onSubmit={handleSubmit} className="space-y-5">
-                <div>
-                  <label htmlFor="password" className="block text-base font-medium text-purple-800 mb-2">Nova Senha</label>
-                  <div className="relative">
-                    <input
-                      id="password"
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="block w-full px-4 py-3 border border-purple-200 rounded-xl shadow-sm bg-white/80 input-focus-color transition-colors"
-                      placeholder="********"
-                      required
-                    />
-                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center text-sm">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-purple-400" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                  </div>
-                  <p className="mt-1 text-sm text-purple-600">Mínimo de 6 caracteres</p>
-                </div>
-                
-                <div>
-                  <label htmlFor="confirmPassword" className="block text-base font-medium text-purple-800 mb-2">Confirmar Nova Senha</label>
-                  <div className="relative">
-                    <input
-                      id="confirmPassword"
-                      type="password"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="block w-full px-4 py-3 border border-purple-200 rounded-xl shadow-sm bg-white/80 input-focus-color transition-colors"
-                      placeholder="********"
-                      required
-                    />
-                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center text-sm">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-purple-400" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-                
-                <button
-                  type="submit"
-                  disabled={isLoading || !token}
-                  className={`w-full py-3 rounded-xl font-semibold text-white shadow-lg transition-all auth-button-gradient ${
-                    isLoading || !token
-                      ? 'opacity-70 cursor-not-allowed' 
-                      : 'hover:shadow-xl hover:-translate-y-0.5'
-                  }`}
-                >
-                  {isLoading ? (
-                    <div className="flex items-center justify-center">
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                      Redefinindo...
-                    </div>
-                  ) : (
-                    'Redefinir Senha'
-                  )}
-                </button>
-                
-                <div className="mt-6 text-center">
-                  <p className="text-purple-700">
-                    Lembrou sua senha?{' '}
-                    <Link href="/login" className="text-violet-600 hover:text-violet-700 font-medium transition-colors">
-                      Voltar para login
-                    </Link>
-                  </p>
-                </div>
-              </form>
-            )}
+            {/* Wrap the component using useSearchParams in a Suspense boundary */}
+            <Suspense fallback={<div className="p-4 text-center text-gray-500">Carregando informações...</div>}>
+              <ResetPasswordForm />
+            </Suspense>
           </div>
         </div>
         

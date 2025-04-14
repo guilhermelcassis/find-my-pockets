@@ -23,9 +23,9 @@ export default function ForgotPasswordPage() {
     } catch (error: any) {
       console.error('Error sending password reset email:', error);
       
-      if (error.code === 'auth/user-not-found') {
+      if (error.message?.includes('user not found')) {
         setError('Não encontramos uma conta com este e-mail.');
-      } else if (error.code === 'auth/invalid-email') {
+      } else if (error.message?.includes('invalid email')) {
         setError('Por favor, forneça um endereço de e-mail válido.');
       } else {
         setError('Ocorreu um erro ao enviar o e-mail de recuperação. Por favor, tente novamente.');

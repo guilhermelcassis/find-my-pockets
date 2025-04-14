@@ -50,7 +50,6 @@ export default function RootLayout({
         <link rel="icon" href="/icons/icon-192x192.png" type="image/png" sizes="192x192" />
         <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#FF6242" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="Find My Pockets" />
@@ -102,4 +101,4 @@ export default function RootLayout({
       </body>
     </html>
   );
-}
+} 

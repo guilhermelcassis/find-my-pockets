@@ -218,7 +218,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     
     try {
-      // Try server-side verification first if we're in a component that can make API requests
+      // Only use server-side verification - client-side might hit RLS issues
       if (typeof window !== 'undefined') {
         try {
           const response = await fetch('/api/auth/check-admin', {
@@ -233,14 +233,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const data = await response.json();
             setIsAdmin(data.isAdmin);
             return data.isAdmin;
+          } else {
+            // Handle unsuccessful response
+            const errorData = await response.json().catch(() => ({}));
+            console.error("Admin check failed:", errorData.error || `Status ${response.status}`);
+            setIsAdmin(false);
+            return false;
           }
         } catch (apiError) {
-          console.log("Server admin check failed, falling back to client check:", apiError);
-          // Continue with client-side check if server check fails
+          console.error("API request failed:", apiError instanceof Error ? apiError.message : "Unknown error");
+          setIsAdmin(false);
+          return false;
         }
       }
       
-      // Client-side fallback
+      // Only use the client-side check as a fallback when absolutely necessary
+      // This will likely face RLS restrictions or require proper policies
+      console.log("Falling back to client-side admin check (this may fail due to RLS)");
       const { data, error } = await supabase
         .from('user_roles')
         .select('role')
@@ -259,22 +268,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.error("Error checking admin status:", {
           code: error.code,
           message: error.message,
-          details: error.details,
-          hint: error.hint
+          details: error.details || 'No details provided',
+          hint: error.hint || 'No hint provided'
         });
         
-        throw error;
+        setIsAdmin(false);
+        return false;
       }
       
       const hasAdminRole = data?.role === 'admin';
       setIsAdmin(hasAdminRole);
       return hasAdminRole;
     } catch (error) {
-      console.error("Error checking admin status:", error);
-      
-      // Check if this might be an RLS permission error
-      if (error && typeof error === 'object' && 'code' in error && error.code === '42501') {
-        console.error("This appears to be a permissions error. Check your RLS policies.");
+      // Improve error logging with type checking
+      if (error instanceof Error) {
+        console.error("Error checking admin status:", {
+          name: error.name,
+          message: error.message,
+          stack: error.stack
+        });
+      } else {
+        console.error("Unknown error checking admin status:", 
+          typeof error === 'object' ? JSON.stringify(error) : error);
       }
       
       setIsAdmin(false);

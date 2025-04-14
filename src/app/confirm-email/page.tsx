@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 
-export default function ConfirmEmailPage() {
+// Create a client component for handling search params
+const EmailConfirmationContent = () => {
   const [email, setEmail] = useState<string>('');
   const [resendLoading, setResendLoading] = useState(false);
   const [resendSuccess, setResendSuccess] = useState(false);
@@ -47,6 +48,77 @@ export default function ConfirmEmailPage() {
     }
   };
 
+  return (
+    <div className="bg-white/70 p-6 rounded-xl border border-purple-100 text-center">
+      <div className="mx-auto w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4">
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+        </svg>
+      </div>
+      
+      <h2 className="text-xl font-bold text-purple-900 mb-2">Quase lá!</h2>
+      <p className="text-purple-700 mb-4">
+        Enviamos um e-mail de confirmação para:
+      </p>
+      <p className="font-medium text-lg text-purple-800 mb-4">
+        {email || 'seu endereço de e-mail'}
+      </p>
+      <p className="text-sm text-purple-600 mb-6">
+        Por favor, verifique sua caixa de entrada e clique no link de confirmação para ativar sua conta.
+      </p>
+      
+      {resendSuccess && (
+        <div className="bg-green-50 border border-green-200 text-green-600 px-4 py-3 rounded-lg text-sm mb-4">
+          <div className="flex items-center">
+            <svg className="h-5 w-5 text-green-500 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            <p>E-mail de confirmação reenviado com sucesso!</p>
+          </div>
+        </div>
+      )}
+      
+      {resendError && (
+        <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm mb-4">
+          <div className="flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            {resendError}
+          </div>
+        </div>
+      )}
+      
+      <div className="space-y-4">
+        <button
+          onClick={handleResendEmail}
+          disabled={resendLoading}
+          className="w-full py-2 px-4 bg-purple-100 hover:bg-purple-200 text-purple-700 font-medium rounded-lg transition-colors"
+        >
+          {resendLoading ? (
+            <span className="flex items-center justify-center">
+              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-purple-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Reenviando...
+            </span>
+          ) : 'Reenviar e-mail de confirmação'}
+        </button>
+        
+        <Link 
+          href="/login"
+          className="block text-center py-2 px-4 border border-purple-200 text-purple-600 font-medium rounded-lg hover:bg-purple-50 transition-colors"
+        >
+          Voltar para o login
+        </Link>
+      </div>
+    </div>
+  );
+};
+
+// Main component without direct useSearchParams usage
+export default function ConfirmEmailPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-purple-200 via-pink-100 to-orange-100">
       <style jsx global>{`
@@ -94,71 +166,10 @@ export default function ConfirmEmailPage() {
           </div>
           
           <div className="p-8 space-y-6 bg-gradient-to-b from-white/60 to-purple-50/60">
-            <div className="bg-white/70 p-6 rounded-xl border border-purple-100 text-center">
-              <div className="mx-auto w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
-              </div>
-              
-              <h2 className="text-xl font-bold text-purple-900 mb-2">Quase lá!</h2>
-              <p className="text-purple-700 mb-4">
-                Enviamos um e-mail de confirmação para:
-              </p>
-              <p className="font-medium text-lg text-purple-800 mb-4">
-                {email || 'seu endereço de e-mail'}
-              </p>
-              <p className="text-sm text-purple-600 mb-6">
-                Por favor, verifique sua caixa de entrada e clique no link de confirmação para ativar sua conta.
-              </p>
-              
-              {resendSuccess && (
-                <div className="bg-green-50 border border-green-200 text-green-600 px-4 py-3 rounded-lg text-sm mb-4">
-                  <div className="flex items-center">
-                    <svg className="h-5 w-5 text-green-500 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <p>E-mail de confirmação reenviado com sucesso!</p>
-                  </div>
-                </div>
-              )}
-              
-              {resendError && (
-                <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm mb-4">
-                  <div className="flex items-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-red-500" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                    </svg>
-                    {resendError}
-                  </div>
-                </div>
-              )}
-              
-              <div className="space-y-4">
-                <button
-                  onClick={handleResendEmail}
-                  disabled={resendLoading}
-                  className="w-full py-2 px-4 bg-purple-100 hover:bg-purple-200 text-purple-700 font-medium rounded-lg transition-colors"
-                >
-                  {resendLoading ? (
-                    <span className="flex items-center justify-center">
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-purple-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Reenviando...
-                    </span>
-                  ) : 'Reenviar e-mail de confirmação'}
-                </button>
-                
-                <Link 
-                  href="/login"
-                  className="block text-center py-2 px-4 border border-purple-200 text-purple-600 font-medium rounded-lg hover:bg-purple-50 transition-colors"
-                >
-                  Voltar para o login
-                </Link>
-              </div>
-            </div>
+            {/* Wrap the component using useSearchParams in a Suspense boundary */}
+            <Suspense fallback={<div className="p-4 text-center text-gray-500">Carregando informações de confirmação...</div>}>
+              <EmailConfirmationContent />
+            </Suspense>
             
             <div className="text-center space-y-4">
               <p className="text-sm text-purple-600">
