@@ -187,12 +187,12 @@ export default function AdminLayout({
                 <Link
                   href="/admin"
                   className={`flex items-center px-3 py-2 rounded-full text-sm font-medium transition-all duration-150 ${
-                    isActive('/admin')
+                    isActive('/admin') && !isActive('/admin/users') && !isActive('/admin/leaders') && !isActive('/admin/groups')
                       ? 'bg-white/20 text-white shadow-md backdrop-blur-sm'
                       : 'text-white/80 hover:bg-white/10 hover:text-white'
                   }`}
                 >
-                  <Home className={`h-4 w-4 sm:mr-2 ${isActive('/admin') ? 'text-white' : 'text-white/80'}`} />
+                  <Home className={`h-4 w-4 sm:mr-2 ${isActive('/admin') && !isActive('/admin/users') && !isActive('/admin/leaders') && !isActive('/admin/groups') ? 'text-white' : 'text-white/80'}`} />
                   <span className="hidden sm:inline">Add Group</span>
                 </Link>
                 
@@ -219,41 +219,62 @@ export default function AdminLayout({
                   <MapIcon className={`h-4 w-4 sm:mr-2 ${isActive('/admin/groups') ? 'text-white' : 'text-white/80'}`} />
                   <span className="hidden sm:inline">Grupos</span>
                 </Link>
+                
+                <Link
+                  href="/admin/users"
+                  className={`flex items-center px-3 py-2 rounded-full text-sm font-medium transition-all duration-150 ${
+                    isActive('/admin/users')
+                      ? 'bg-white/20 text-white shadow-md backdrop-blur-sm'
+                      : 'text-white/80 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  <UserCircle className={`h-4 w-4 sm:mr-2 ${isActive('/admin/users') ? 'text-white' : 'text-white/80'}`} />
+                  <span className="hidden sm:inline">Usuários</span>
+                </Link>
               </nav>
               
-              {/* User account */}
-              <div className="relative z-10" ref={dropdownRef}>
+              {/* User account - with full-screen overlay dropdown */}
+              <div className="relative" ref={dropdownRef}>
                 <button 
-                  className="flex items-center space-x-2 rounded-full pl-2 pr-3 py-1.5 hover:bg-white/10 transition-all duration-200"
+                  className="flex items-center space-x-2 rounded-full pl-2 pr-3 py-1.5 bg-white/10 hover:bg-white/20"
                   onClick={() => setDropdownOpen(!dropdownOpen)}
                 >
-                  <div className="h-8 w-8 rounded-full bg-white/15 flex items-center justify-center overflow-hidden border border-white/30">
+                  <div className="h-8 w-8 rounded-full bg-white/20 flex items-center justify-center">
                     <UserCircle className="h-6 w-6 text-white" />
                   </div>
-                  <div className="hidden sm:flex items-center">
-                    <span className="text-sm font-medium text-white max-w-[120px] truncate">
-                      {user.email?.split('@')[0]}
+                  <div className="flex items-center">
+                    <span className="text-sm font-medium text-white">
+                      {user?.email?.split('@')[0] || 'User'}
                     </span>
                   </div>
                 </button>
                 
-                {/* User dropdown */}
+                {/* Full-screen overlay when dropdown is open */}
                 {dropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10 border border-gray-200 animate-in fade-in slide-in-from-top-5 duration-150">
-                    <div className="px-4 py-2 border-b border-gray-100">
-                      <p className="text-xs font-medium text-gray-500">Conectado como</p>
-                      <p className="text-sm text-gray-700 truncate">{user.email}</p>
-                    </div>
-                    <button
-                      className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
-                      onClick={async () => {
-                        await logOut();
-                        router.push('/login');
-                      }}
+                  <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50" onClick={() => setDropdownOpen(false)}>
+                    {/* Visible logout card */}
+                    <div 
+                      className="fixed top-20 right-4 w-72 bg-white rounded-lg shadow-lg overflow-hidden z-50"
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      <LogOut className="h-4 w-4 mr-2 text-gray-500" />
-                      <span>Sair</span>
-                    </button>
+                      <div className="admin-navbar-gradient p-4 text-white">
+                        <h3 className="font-medium">Perfil do Usuário</h3>
+                        <p className="text-sm text-white/90 truncate mt-1">{user?.email}</p>
+                      </div>
+                      
+                      <div className="p-4">
+                        <button
+                          onClick={() => {
+                            logOut();
+                            router.push('/login');
+                          }}
+                          className="w-full flex items-center justify-center gap-2 bg-white hover:bg-gray-100 border border-gray-200 text-gray-700 py-2 px-4 rounded-full text-sm font-medium transition-all duration-150"
+                        >
+                          <LogOut className="h-4 w-4 text-gray-500" />
+                          <span>Sair</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>

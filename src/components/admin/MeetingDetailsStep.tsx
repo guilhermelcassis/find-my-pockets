@@ -55,11 +55,11 @@ export default function MeetingDetailsStep({
   
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold mb-2">Passo 2: Horários de Encontro</h2>
+      <h2 className="text-xl font-semibold mb-2">Passo 2: Horários de Encontro (Opcional)</h2>
       
       <div className="bg-gray-50 p-4 rounded border">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="font-medium">Horários do Grupo</h3>
+          <h3 className="font-medium">Horários do Grupo <span className="text-sm text-gray-500 font-normal">(Opcional)</span></h3>
           <button 
             type="button"
             className="bg-blue-500 hover:bg-blue-600 text-white py-1 px-3 rounded text-sm flex items-center"
@@ -75,7 +75,7 @@ export default function MeetingDetailsStep({
         {group.meetingTimes.length === 0 ? (
           <div className="text-center py-8 bg-white rounded border border-dashed border-gray-300">
             <p className="text-gray-600 font-medium">Nenhum horário adicionado</p>
-            <p className="text-sm text-gray-500 mt-1">Clique no botão acima para adicionar horários de encontro</p>
+            <p className="text-sm text-gray-500 mt-1">Horários de encontro são opcionais. Clique no botão acima para adicionar caso necessário.</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -96,12 +96,11 @@ export default function MeetingDetailsStep({
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <label className="block mb-1 text-sm font-medium">Dia da Semana <span className="text-red-500">*</span></label>
+                    <label className="block mb-1 text-sm font-medium">Dia da Semana <span className="text-red-500">*</span><span className="text-xs text-gray-500 ml-1">(Se adicionar horário)</span></label>
                     <select
                       value={meeting.dayofweek}
                       className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all" 
                       onChange={(e) => updateMeetingTime(index, 'dayofweek', e.target.value)} 
-                      required 
                     >
                       <option value="">Selecione um dia</option>
                       <option value="Segunda-feira">Segunda-feira</option>
@@ -115,13 +114,12 @@ export default function MeetingDetailsStep({
                   </div>
 
                   <div>
-                    <label className="block mb-1 text-sm font-medium">Horário <span className="text-red-500">*</span></label>
+                    <label className="block mb-1 text-sm font-medium">Horário <span className="text-red-500">*</span><span className="text-xs text-gray-500 ml-1">(Se adicionar horário)</span></label>
                     <input 
                       type="time" 
                       value={meeting.time}
                       className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none transition-all" 
                       onChange={(e) => updateMeetingTime(index, 'time', e.target.value)} 
-                      required 
                     />
                   </div>
                   
@@ -177,19 +175,22 @@ export default function MeetingDetailsStep({
           type="button" 
           className="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded order-1 sm:order-2 transition-colors"
           onClick={() => {
-            if (group.meetingTimes.length === 0) {
-              setStatusMessage({ text: 'Por favor, adicione pelo menos um horário de encontro', type: 'error' });
-              return;
-            }
+            // Remove the validation that required meeting times
+            // if (group.meetingTimes.length === 0) {
+            //   setStatusMessage({ text: 'Por favor, adicione pelo menos um horário de encontro', type: 'error' });
+            //   return;
+            // }
             
-            // Check if all meeting times have day and time
-            const invalidMeetings = group.meetingTimes.filter(
-              m => !m.dayofweek || !m.time
-            );
-            
-            if (invalidMeetings.length > 0) {
-              setStatusMessage({ text: 'Todos os horários precisam ter dia da semana e hora definidos', type: 'error' });
-              return;
+            // Only check if provided meeting times have day and time if there are any meeting times
+            if (group.meetingTimes.length > 0) {
+              const invalidMeetings = group.meetingTimes.filter(
+                m => !m.dayofweek || !m.time
+              );
+              
+              if (invalidMeetings.length > 0) {
+                setStatusMessage({ text: 'Todos os horários adicionados precisam ter dia da semana e hora definidos', type: 'error' });
+                return;
+              }
             }
             
             goToStep(3);

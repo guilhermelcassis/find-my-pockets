@@ -9,6 +9,7 @@ import Script from 'next/script';
 import { Users, Map as MapIcon, PlusCircle } from 'lucide-react';
 import StatusMessage from '@/components/StatusMessage';
 import { GoogleMap, GoogleMarker, getWindowProperty, setWindowProperty } from '@/lib/google-maps-types';
+import InviteUserForm from '@/components/admin/InviteUserForm';
 
 // Flag to prevent duplicate Google Maps loading
 declare global {
@@ -628,12 +629,8 @@ const AdminPage = () => {
             return;
         }
         
-        // Validate meeting times
-        if (group.meetingTimes.length === 0) {
-            setStatusMessage({ text: 'Adicione pelo menos um horário de encontro', type: 'error' });
-            return;
-        }
-
+        // Meeting times validation removed - now optional
+        
         setStatusMessage({ text: 'Adicionando grupo...', type: 'info' });
 
         try {
@@ -856,6 +853,23 @@ const AdminPage = () => {
         };
     }, [initAutocomplete, autocompleteInitialized]);
 
+    // Add a handler for the invite success
+    const handleInviteSuccess = (email: string) => {
+        setStatusMessage({
+            text: `Convite enviado com sucesso para ${email}`,
+            type: 'success'
+        });
+        
+        // Auto-dismiss status message after 5 seconds
+        if (statusTimeoutRef.current) {
+            clearTimeout(statusTimeoutRef.current);
+        }
+        
+        statusTimeoutRef.current = setTimeout(() => {
+            setStatusMessage(null);
+        }, 5000);
+    };
+
     return (
         <>
             {/* Google Maps Script with key parameter and updated callback */}
@@ -907,6 +921,7 @@ const AdminPage = () => {
                             />
                         </div>
                     )}
+
                     
                     {/* Main form container */}
                     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden transition-all hover:shadow-md">
@@ -1331,17 +1346,9 @@ const AdminPage = () => {
                                                     group.meetingTimes.length === 0 ? 'opacity-70 cursor-not-allowed' : ''
                                                 }`}
                                                 onClick={() => {
-                                                    if (group.meetingTimes.length === 0) {
-                                                        setStatusMessage({
-                                                            text: 'Por favor, adicione pelo menos um horário de encontro',
-                                                            type: 'error'
-                                                        });
-                                                        return;
-                                                    }
-                                                    
-                                                    // Check if all meeting times have day and time
+                                                    // Check if all meeting times have day and time (if any are provided)
                                                     const invalidMeetings = group.meetingTimes.filter(
-                                                        m => !m.dayofweek || !m.time
+                                                        m => (m.dayofweek && !m.time) || (!m.dayofweek && m.time)
                                                     );
                                                     
                                                     if (invalidMeetings.length > 0) {
