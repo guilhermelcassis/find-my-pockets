@@ -293,7 +293,7 @@ const AdminPage = () => {
             
             // Create autocomplete with university bias
             const autocompleteOptions = {
-                types: ['university', 'school'],
+                //types: ['university', 'school'],
                 fields: ['name', 'address_components', 'geometry', 'formatted_address']
             };
             
