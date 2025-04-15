@@ -118,7 +118,7 @@ const GroupListFilter: React.FC<GroupListFilterProps> = ({
             </div>
             <Input
               type="search" 
-              placeholder="Buscar por nome, cidade, estado..." 
+              placeholder="Buscar por universidade, cidade, estado ou líder..." 
               className="w-full pl-10 pr-10 focus:border-primary focus:ring-1 focus:ring-primary"
               value={searchTerm}
               onChange={(e) => onSearchChange(e.target.value)}

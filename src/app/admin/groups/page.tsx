@@ -447,14 +447,23 @@ export default function GroupsPage() {
       // Normalize search term for better matching
       const normalizedSearchTerm = normalizeText(searchTerm);
       
-      // First, fetch all leaders that match the search term with broader matching
-      const { data: leadersData, error: leadersError } = await supabase
-        .from('leaders')
-        .select('id, name')
-        .or(`name.ilike.%${normalizedSearchTerm}%,name.ilike.% ${normalizedSearchTerm}%`)
-        .order('name');
-        
-      console.log(`Leader search for "${normalizedSearchTerm}" found ${leadersData?.length || 0} matching leaders`);
+      // Split the search term into words to search for each word independently
+      const searchWords = normalizedSearchTerm.split(/\s+/).filter(word => word.length > 0);
+      
+      // Build the query
+      let leadersQuery = supabase.from('leaders').select('id, name');
+      
+      // If we have multiple words, search for each word independently
+      if (searchWords.length > 1) {
+        const orConditions = searchWords.map(word => `name.ilike.%${word}%`).join(',');
+        leadersQuery = leadersQuery.or(orConditions);
+      } else {
+        // Single word search
+        leadersQuery = leadersQuery.ilike('name', `%${normalizedSearchTerm}%`);
+      }
+      
+      // Execute the query
+      const { data: leadersData, error: leadersError } = await leadersQuery.order('name');
       
       if (leadersError) throw leadersError;
       
@@ -462,15 +471,16 @@ export default function GroupsPage() {
         return { groups: [], count: 0 };
       }
       
+      console.log(`Leader search for "${normalizedSearchTerm}" found ${leadersData.length} matching leaders`);
+      
       // Extract the leader IDs
       const leaderIds = leadersData.map(leader => leader.id);
       
       // Now fetch groups with these leader IDs
       let groupsQuery = supabase
         .from('groups')
-        .select('*')
+        .select('*', { count: 'exact' })
         .in('leader_id', leaderIds)
-        // Add sorting by university name for leader search results as well
         .order('university', { ascending: true });
       
       // Apply active/inactive filter if needed
@@ -566,6 +576,30 @@ export default function GroupsPage() {
         console.error('Error fetching groups:', error);
         toast.error(`Error fetching groups: ${error.message}`);
         return;
+      }
+      
+      // If we have a search term but found no results through standard search, try leader search
+      if (searchTerm && (!data || data.length === 0)) {
+        console.log('No results from direct group search, trying leader search');
+        
+        // Search by leader name using our existing function
+        const leaderSearchResult = await searchByLeaderName(searchTerm, filter);
+        
+        if (leaderSearchResult.groups.length > 0) {
+          console.log(`Found ${leaderSearchResult.groups.length} groups via leader search`);
+          
+          // If we found results through leader search, use those
+          setGroups(leaderSearchResult.groups);
+          setTotalCount(leaderSearchResult.count);
+          
+          // Update page if needed
+          if (resetPage) {
+            setCurrentPage(1);
+          }
+          
+          setIsLoading(false);
+          return;
+        }
       }
       
       // Update the groups with fetched data
