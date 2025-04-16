@@ -1,9 +1,9 @@
-import { Search, X, Users, CheckCircle, XCircle } from "lucide-react";
+import { Search, X, Users, CheckCircle, XCircle, UserMinus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-export type FilterStatus = 'all' | 'active' | 'inactive';
+export type FilterStatus = 'all' | 'active' | 'inactive' | 'unassigned';
 
 interface LeaderListFilterProps {
   activeFilter: FilterStatus;
@@ -11,6 +11,7 @@ interface LeaderListFilterProps {
   totalLeaders: number;
   activeLeaders: number;
   inactiveLeaders: number;
+  unassignedLeaders: number;
   onFilterChange: (filter: FilterStatus) => void;
   onSearchChange: (value: string) => void;
   onClearSearch: () => void;
@@ -22,6 +23,7 @@ export default function LeaderListFilter({
   totalLeaders,
   activeLeaders,
   inactiveLeaders,
+  unassignedLeaders,
   onFilterChange,
   onSearchChange,
   onClearSearch
@@ -79,6 +81,23 @@ export default function LeaderListFilter({
             <span className="truncate">Inativos</span>
             <Badge variant="outline" className="ml-1.5 bg-red-50 text-red-600 text-xs rounded-full px-2 py-0.5 min-w-6 flex items-center justify-center border-red-200 flex-shrink-0">
               {inactiveLeaders}
+            </Badge>
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className={`
+              rounded-md transition-all flex items-center gap-2 px-3 text-sm font-medium
+              ${activeFilter === 'unassigned' 
+                ? 'bg-blue-50 text-blue-600 border border-blue-200 shadow-sm' 
+                : 'text-gray-600 hover:bg-blue-50/30 hover:text-blue-600'}
+            `}
+            onClick={() => onFilterChange('unassigned')}
+          >
+            <UserMinus className="h-3.5 w-3.5 flex-shrink-0" />
+            <span className="truncate">Sem Grupo</span>
+            <Badge variant="outline" className="ml-1.5 bg-blue-50 text-blue-600 text-xs rounded-full px-2 py-0.5 min-w-6 flex items-center justify-center border-blue-200 flex-shrink-0">
+              {unassignedLeaders}
             </Badge>
           </Button>
         </div>

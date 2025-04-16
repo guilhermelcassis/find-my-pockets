@@ -16,6 +16,7 @@ import { Menu, Home, Users } from 'lucide-react';
 export default function LeadersPage() {
   // State
   const [leaders, setLeaders] = useState<Leader[]>([]);
+  const [assignedLeaderIds, setAssignedLeaderIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingLeader, setEditingLeader] = useState<Leader | null>(null);
@@ -37,22 +38,38 @@ export default function LeadersPage() {
 
   // Fetch leaders from Supabase
   useEffect(() => {
-    fetchLeaders();
+    fetchLeadersAndGroups();
   }, []);
 
-  const fetchLeaders = async () => {
+  const fetchLeadersAndGroups = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      
+      // Fetch all leaders
+      const { data: leadersData, error: leadersError } = await supabase
         .from('leaders')
         .select('*');
       
-      if (error) {
-        throw error;
+      if (leadersError) {
+        throw leadersError;
       }
       
-      if (data) {
-        const formattedLeaders = data.map(leader => ({
+      // Fetch all groups to identify which leaders are assigned
+      const { data: groupsData, error: groupsError } = await supabase
+        .from('groups')
+        .select('leader_id')
+        .not('leader_id', 'is', null);
+      
+      if (groupsError) {
+        throw groupsError;
+      }
+      
+      // Extract leader IDs that are assigned to groups
+      const assignedIds = groupsData.map(group => group.leader_id);
+      setAssignedLeaderIds(assignedIds);
+      
+      if (leadersData) {
+        const formattedLeaders = leadersData.map(leader => ({
           id: leader.id,
           name: leader.name,
           phone: leader.phone,
@@ -65,8 +82,8 @@ export default function LeadersPage() {
         setLeaders(sortedLeaders);
       }
     } catch (error) {
-      console.error('Error fetching leaders:', error);
-      showNotification('Error fetching leaders. Please try again.', 'error');
+      console.error('Error fetching data:', error);
+      showNotification('Error fetching data. Please try again.', 'error');
     } finally {
       setLoading(false);
     }
@@ -78,6 +95,7 @@ export default function LeadersPage() {
       // Apply active filter
       if (activeFilter === 'active') return leader.active;
       if (activeFilter === 'inactive') return !leader.active;
+      if (activeFilter === 'unassigned') return leader.active && !assignedLeaderIds.includes(leader.id);
       return true;
     })
     .filter(leader => {
@@ -97,6 +115,7 @@ export default function LeadersPage() {
   // Counts for the filters
   const activeLeaders = leaders.filter(leader => leader.active).length;
   const inactiveLeaders = leaders.filter(leader => !leader.active).length;
+  const unassignedLeaders = leaders.filter(leader => leader.active && !assignedLeaderIds.includes(leader.id)).length;
 
   // Pagination logic
   const indexOfLastLeader = currentPage * leadersPerPage;
@@ -190,7 +209,7 @@ export default function LeadersPage() {
       
       if (data && data.length > 0) {
         // Refresh the leaders list
-      fetchLeaders();
+      fetchLeadersAndGroups();
         setShowAddForm(false);
         showNotification(`${newLeader.name} foi adicionado com sucesso.`, 'success');
       }
@@ -235,7 +254,7 @@ export default function LeadersPage() {
       if (error) throw error;
       
       // Refresh the leaders list
-      fetchLeaders();
+      fetchLeadersAndGroups();
       setEditingLeader(null);
       showNotification(`${updatedLeader.name} foi atualizado com sucesso.`, 'success');
     } catch (error) {
@@ -259,7 +278,7 @@ export default function LeadersPage() {
       if (error) throw error;
       
       // Refresh the leaders list
-      fetchLeaders();
+      fetchLeadersAndGroups();
       // Clear message format to ensure visibility
       showNotification(
         updatedActive 
@@ -371,8 +390,9 @@ export default function LeadersPage() {
                   activeFilter={activeFilter} 
                   searchTerm={searchTerm}
                   totalLeaders={leaders.length}
-                  activeLeaders={leaders.filter(l => l.active).length}
-                  inactiveLeaders={leaders.filter(l => !l.active).length}
+                  activeLeaders={activeLeaders}
+                  inactiveLeaders={inactiveLeaders}
+                  unassignedLeaders={unassignedLeaders}
                   onFilterChange={handleFilterChange}
                   onSearchChange={handleSearchChange}
                   onClearSearch={() => setSearchTerm('')}
@@ -407,6 +427,7 @@ export default function LeadersPage() {
                           key={leader.id} 
                           leader={leader}
                           isLastItem={index === currentLeaders.length - 1}
+                          isAssigned={assignedLeaderIds.includes(leader.id)}
                           onEdit={() => {
                             setEditingLeader(leader);
                             setShowAddForm(true);

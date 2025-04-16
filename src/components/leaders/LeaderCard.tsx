@@ -1,7 +1,7 @@
 import { Leader } from '../../types/Leader';
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Phone, Mail, Edit, Power, GraduationCap } from "lucide-react";
+import { Phone, Mail, Edit, Power, GraduationCap, Users } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -12,11 +12,18 @@ import {
 interface LeaderCardProps {
   leader: Leader;
   isLastItem?: boolean;
+  isAssigned?: boolean;
   onEdit: () => void;
   onToggleActive: () => void;
 }
 
-export default function LeaderCard({ leader, isLastItem = false, onEdit, onToggleActive }: LeaderCardProps) {
+export default function LeaderCard({ 
+  leader, 
+  isLastItem = false, 
+  isAssigned = false,
+  onEdit, 
+  onToggleActive 
+}: LeaderCardProps) {
   return (
     <div className={`flex items-center ${!isLastItem ? 'border-b' : ''} bg-white overflow-hidden hover:shadow-sm transition-shadow
       ${leader.active 
@@ -26,7 +33,7 @@ export default function LeaderCard({ leader, isLastItem = false, onEdit, onToggl
       {/* Name with status badge - fixed width */}
       <div className="py-2 px-3 min-w-0 w-[40%] flex-shrink-0 border-r border-border">
         <div className="flex items-center gap-2 max-w-full">
-          <div className="min-w-0 max-w-[calc(100%-60px)]">
+          <div className="min-w-0 max-w-[calc(100%-120px)]">
             <h3 className="text-sm font-medium text-gray-800 truncate">
               {leader.name}
             </h3>
@@ -41,6 +48,25 @@ export default function LeaderCard({ leader, isLastItem = false, onEdit, onToggl
           >
             {leader.active ? 'Ativo' : 'Inativo'}
           </Badge>
+          
+          {isAssigned && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    variant="outline"
+                    className="text-xs h-5 px-1.5 flex items-center whitespace-nowrap flex-shrink-0 bg-blue-50 text-blue-600 border-blue-200"
+                  >
+                    <Users className="h-3 w-3 mr-0.5" />
+                    Grupo
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  <p className="text-xs font-medium">Líder já está associado a um grupo</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
         </div>
       </div>
       
