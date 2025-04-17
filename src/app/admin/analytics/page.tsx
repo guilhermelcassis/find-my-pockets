@@ -420,7 +420,7 @@ export default function AnalyticsDashboard() {
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(value, name) => [value, name.replace('_', ' ')]} />
+                      <Tooltip formatter={(value, name) => [value, String(name).replace('_', ' ')]} />
                     </PieChart>
                   </ResponsiveContainer>
                 ) : (
