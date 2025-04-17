@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useEffect, useState, useRef } from 'react';
 import Script from 'next/script';
 import Link from 'next/link';
-import { Users, Home, Map as MapIcon, LogOut, UserCircle, Layers } from 'lucide-react';
+import { Users, Home, Map as MapIcon, LogOut, UserCircle, Layers, BarChart } from 'lucide-react';
 
 // Add the type declaration for the global guard
 declare global {
@@ -230,6 +230,18 @@ export default function AdminLayout({
                 >
                   <UserCircle className={`h-4 w-4 sm:mr-2 ${isActive('/admin/users') ? 'text-white' : 'text-white/80'}`} />
                   <span className="hidden sm:inline">Usuários</span>
+                </Link>
+                
+                <Link
+                  href="/admin/analytics"
+                  className={`flex items-center px-3 py-2 rounded-full text-sm font-medium transition-all duration-150 ${
+                    isActive('/admin/analytics')
+                      ? 'bg-white/20 text-white shadow-md backdrop-blur-sm'
+                      : 'text-white/80 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  <BarChart className={`h-4 w-4 sm:mr-2 ${isActive('/admin/analytics') ? 'text-white' : 'text-white/80'}`} />
+                  <span className="hidden sm:inline">Analytics</span>
                 </Link>
               </nav>
               

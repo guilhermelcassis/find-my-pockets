@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { Group } from '../lib/interfaces';
 import CustomInfoWindow from './CustomInfoWindow';
+import AnalyticsService from '@/lib/supabase-analytics';
 
 // Export interface to define the map ref methods
 export interface MapRef {
@@ -1286,6 +1287,14 @@ const Map = forwardRef<MapRef, MapProps>(({
             accuracy: position.coords.accuracy
           });
           
+          // Track successful location retrieval
+          AnalyticsService.trackLocationUse('receive', {
+            accuracy: position.coords.accuracy,
+            // Include approximate location (rounded to 2 decimal places for privacy)
+            approximate_lat: Math.round(position.coords.latitude * 100) / 100,
+            approximate_lng: Math.round(position.coords.longitude * 100) / 100
+          });
+          
           // Clear the requesting message
           setUserLocationError(null);
           
@@ -1452,6 +1461,12 @@ const Map = forwardRef<MapRef, MapProps>(({
         (error) => {
           console.error("Geolocation error:", error);
           
+          // Track location error
+          AnalyticsService.trackLocationUse('error', {
+            error_code: error.code,
+            error_message: error.message
+          });
+          
           // Clear the requesting message
           setUserLocationError(null);
           
@@ -1491,10 +1506,16 @@ const Map = forwardRef<MapRef, MapProps>(({
     } catch (error) {
       console.error("Error in getUserLocation:", error);
       
+      // Track unexpected error
+      AnalyticsService.trackLocationUse('error', {
+        error_type: 'unexpected',
+        error_message: error instanceof Error ? error.message : String(error)
+      });
+      
       // Show a generic error message
       setUserLocationError("Ocorreu um erro ao tentar acessar sua localização.");
     }
-  }, [map, isMapReady, userLocation, supportsAdvancedMarkers, infoWindow, onMarkerClick]);
+  }, [map, isMapReady, infoWindow, onMarkerClick, userLocation, supportsAdvancedMarkers, setUserLocation, setUserLocationError, setHasTriedLocationRequest]);
 
   // Helper function to calculate distance between two coordinates in meters
   const getDistanceInMeters = (lat1: number, lon1: number, lat2: number, lon2: number): number => {

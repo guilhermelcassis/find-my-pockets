@@ -10,6 +10,7 @@ import SearchResults from '@/components/SearchResults';
 import Link from 'next/link';
 import Image from 'next/image';
 import Analytics from '../lib/analytics';
+import AnalyticsService from '../lib/supabase-analytics';
 
 // Modern font selection with better combinations
 import { Inter, Poppins, Plus_Jakarta_Sans, Space_Grotesk } from 'next/font/google';
@@ -809,10 +810,10 @@ export default function Home() {
     console.log(`Result clicked: ${groupId}`);
     setSelectedGroupId(groupId);
     
-    // Find the clicked group and track the interaction
+    // Find the clicked group and track the interaction with enhanced analytics
     const clickedGroup = filteredGroups.find(g => g.id === groupId);
     if (clickedGroup) {
-      Analytics.trackGroupClick(clickedGroup, 'search_results');
+      AnalyticsService.trackGroupClick(clickedGroup, 'search_results');
     }
     
     // If user is typing, don't handle result click to prevent input focus issues
@@ -972,8 +973,8 @@ export default function Home() {
     
     console.log(`Selected suggestion: ${suggestion.text}, type: ${suggestion.type}`);
     
-    // Track suggestion selection with analytics
-    Analytics.trackSuggestionSelect(suggestion.text, suggestion.type);
+    // Track suggestion selection with enhanced analytics
+    AnalyticsService.trackSuggestionSelect(suggestion.text, suggestion.type);
     
     // Set flag to indicate we're in a selection process
     inSuggestionSelectionProcess.current = true;
@@ -1259,8 +1260,8 @@ export default function Home() {
         }
       }
       
-      // After search completes, track with analytics
-      Analytics.trackSearch(term, effectiveType, filteredResults.length);
+      // Track search with enhanced analytics
+      AnalyticsService.trackSearch(term, effectiveType, filteredResults.length);
     } catch (error) {
       console.error("Error during search:", error);
     } finally {
@@ -1875,11 +1876,11 @@ export default function Home() {
                       // Handle marker click logic
                       setSelectedGroupId(groupId);
                       
-                      // Find the clicked group and track the interaction
+                      // Find the clicked group and track with enhanced analytics
                       const clickedGroup = filteredGroups.find(g => g.id === groupId) || 
                                            allGroups.find(g => g.id === groupId);
                       if (clickedGroup) {
-                        Analytics.trackGroupClick(clickedGroup, 'map');
+                        AnalyticsService.trackGroupClick(clickedGroup, 'map');
                       }
                       
                       // If there's an existing handleResultClick function, call it
@@ -1897,6 +1898,10 @@ export default function Home() {
                       onClick={() => {
                         if (mapRef.current) {
                           console.log("Getting user location");
+                          // Track location button click
+                          AnalyticsService.trackButtonClick('my_location');
+                          // Track location use
+                          AnalyticsService.trackLocationUse('request');
                           mapRef.current.getUserLocation();
                         }
                       }}
@@ -1913,6 +1918,8 @@ export default function Home() {
                     <button
                       onClick={() => {
                         if (mapRef.current) {
+                          // Track show all groups button click
+                          AnalyticsService.trackButtonClick('show_all_groups');
                           mapRef.current.fitBoundsToMarkers();
                         }
                       }}

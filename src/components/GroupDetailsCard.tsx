@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Group, MeetingTime, Leader } from '@/lib/interfaces';
+import AnalyticsService from '@/lib/supabase-analytics';
 
 interface GroupDetailsCardProps {
   group: Group;
@@ -219,7 +220,15 @@ const GroupDetailsCard: React.FC<GroupDetailsCardProps> = ({
                 target="_blank"
                 rel="noopener noreferrer"
                 className="mobile-action-button bg-purple-50 text-purple-600"
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation(); // Stop event propagation
+                  // Track Instagram button click
+                  AnalyticsService.trackButtonClick('instagram', { 
+                    group_id: group.id,
+                    instagram: group.instagram,
+                    university: group.university
+                  });
+                }}
                 aria-label="Página no Instagram"
               >
                 <svg 
@@ -244,7 +253,15 @@ const GroupDetailsCard: React.FC<GroupDetailsCardProps> = ({
                 target="_blank"
                 rel="noopener noreferrer"
                 className="mobile-action-button bg-blue-50 text-blue-600"
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation(); // Stop event propagation
+                  // Track Maps button click
+                  AnalyticsService.trackButtonClick('maps', { 
+                    group_id: group.id,
+                    coordinates: `${group.coordinates.latitude},${group.coordinates.longitude}`,
+                    university: group.university
+                  });
+                }}
                 aria-label="Ver no Google Maps"
               >
                 <svg 
@@ -297,7 +314,15 @@ const GroupDetailsCard: React.FC<GroupDetailsCardProps> = ({
                 target="_blank"
                 rel="noopener noreferrer"
                 className="desktop-action-button bg-purple-50 text-purple-600 hover:bg-purple-100"
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation(); // Stop event propagation
+                  // Track Instagram button click
+                  AnalyticsService.trackButtonClick('instagram', { 
+                    group_id: group.id,
+                    instagram: group.instagram,
+                    university: group.university
+                  });
+                }}
                 aria-label="Página no Instagram"
               >
                 <svg 
@@ -323,7 +348,15 @@ const GroupDetailsCard: React.FC<GroupDetailsCardProps> = ({
                 target="_blank"
                 rel="noopener noreferrer"
                 className="desktop-action-button bg-blue-50 text-blue-600 hover:bg-blue-100"
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation(); // Stop event propagation
+                  // Track Maps button click
+                  AnalyticsService.trackButtonClick('maps', { 
+                    group_id: group.id,
+                    coordinates: `${group.coordinates.latitude},${group.coordinates.longitude}`,
+                    university: group.university
+                  });
+                }}
                 aria-label="Ver no Google Maps"
               >
                 <svg 
@@ -331,14 +364,14 @@ const GroupDetailsCard: React.FC<GroupDetailsCardProps> = ({
                   viewBox="0 0 24 24" 
                   fill="none" 
                   stroke="currentColor" 
-                  strokeWidth="2"
+                  strokeWidth="2" 
                   strokeLinecap="round" 
                   strokeLinejoin="round"
                 >
                   <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
                   <circle cx="12" cy="10" r="3"></circle>
                 </svg>
-                <span className="truncate">Mapa</span>
+                <span className="truncate">Google Maps</span>
               </a>
             )}
           </div>

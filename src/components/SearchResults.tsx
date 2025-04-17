@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Group } from '@/lib/interfaces';
+import AnalyticsService from '@/lib/supabase-analytics';
 
 interface SearchResultsProps {
   searchResults: Group[];
@@ -136,7 +137,15 @@ const SearchResults: React.FC<SearchResultsProps> = ({
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center justify-center p-2 rounded-lg bg-purple-50 text-purple-600 transition-all duration-200 hover:bg-purple-500 hover:text-white"
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation(); // Stop event propagation to parent
+                          // Track Instagram button click
+                          AnalyticsService.trackButtonClick('instagram', { 
+                            group_id: group.id,
+                            instagram: group.instagram,
+                            university: group.university
+                          });
+                        }}
                         aria-label="Página no Instagram"
                       >
                         <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -153,7 +162,15 @@ const SearchResults: React.FC<SearchResultsProps> = ({
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center justify-center p-2 rounded-lg bg-blue-50 text-blue-600 transition-all duration-200 hover:bg-blue-500 hover:text-white"
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation(); // Stop event propagation to parent
+                          // Track Maps button click
+                          AnalyticsService.trackButtonClick('maps', { 
+                            group_id: group.id,
+                            coordinates: `${group.coordinates.latitude},${group.coordinates.longitude}`,
+                            university: group.university
+                          });
+                        }}
                         aria-label="Ver no Google Maps"
                       >
                         <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
