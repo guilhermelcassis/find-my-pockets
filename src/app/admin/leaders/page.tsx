@@ -11,7 +11,7 @@ import EmptyState from '@/components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
-import { Menu, Home, Users } from 'lucide-react';
+import { Menu, Home, Users, Download } from 'lucide-react';
 
 export default function LeadersPage() {
   // State
@@ -86,6 +86,63 @@ export default function LeadersPage() {
       showNotification('Error fetching data. Please try again.', 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Export leaders to CSV
+  const exportLeadersData = () => {
+    if (!filteredLeaders || filteredLeaders.length === 0) {
+      showNotification('No data to export.', 'info');
+      return;
+    }
+    
+    try {
+      // Define the headers for the CSV
+      const headers = ['Nome', 'Telefone', 'Email', 'Curso', 'Status', 'Atribuído'];
+      
+      // Function to properly escape CSV fields for special characters and commas
+      const escapeCSVField = (field: string) => {
+        if (field === null || field === undefined) return '';
+        const stringField = String(field);
+        // If the field contains commas, quotes, or newlines, wrap it in quotes and escape any quotes
+        if (stringField.includes(',') || stringField.includes('"') || stringField.includes('\n')) {
+          return `"${stringField.replace(/"/g, '""')}"`;
+        }
+        return stringField;
+      };
+      
+      // Create CSV content with the headers and data rows
+      const csvContent = [
+        headers.map(escapeCSVField).join(','),
+        ...filteredLeaders.map(leader => [
+          escapeCSVField(leader.name),
+          escapeCSVField(leader.phone),
+          escapeCSVField(leader.email),
+          escapeCSVField(leader.curso),
+          escapeCSVField(leader.active ? 'Ativo' : 'Inativo'),
+          escapeCSVField(assignedLeaderIds.includes(leader.id) ? 'Sim' : 'Não')
+        ].join(','))
+      ].join('\n');
+      
+      // Add UTF-8 BOM (Byte Order Mark) to help Excel recognize the encoding
+      // UTF-8 BOM is the byte sequence 0xEF,0xBB,0xBF
+      const BOM = "\uFEFF";
+      const csvContentWithBOM = BOM + csvContent;
+      
+      // Create a blob with explicit UTF-8 encoding
+      const blob = new Blob([csvContentWithBOM], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `lideres-${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      showNotification('Dados exportados com sucesso!', 'success');
+    } catch (error) {
+      console.error('Error exporting data:', error);
+      showNotification('Erro ao exportar dados. Por favor, tente novamente.', 'error');
     }
   };
 
@@ -397,6 +454,18 @@ export default function LeadersPage() {
                   onSearchChange={handleSearchChange}
                   onClearSearch={() => setSearchTerm('')}
                 />
+
+                {/* Export Button */}
+                <div className="flex justify-end mb-4">
+                  <Button
+                    onClick={exportLeadersData}
+                    className="bg-primary hover:bg-primary/90 text-white"
+                    disabled={filteredLeaders.length === 0}
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    Exportar CSV
+                  </Button>
+                </div>
 
                 {loading ? (
                   <div className="flex justify-center items-center p-12">

@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../../../lib/supabase';
 import Link from 'next/link';
-import { Group } from '../../../lib/interfaces';
-import { Map as MapIcon, Users, ChevronDown } from 'lucide-react';
+import { Group, MeetingTime } from '../../../lib/interfaces';
+import { Map as MapIcon, Users, ChevronDown, Download } from 'lucide-react';
 import GroupList from '@/components/groups/GroupList';
 import GroupListFilter from '@/components/groups/GroupListFilter';
 import { Button } from '@/components/ui/button';
@@ -71,6 +71,163 @@ export default function GroupsPage() {
   // Add this state to track autocomplete initialization
   const [autocompleteInitialized, setAutocompleteInitialized] = useState<boolean>(false);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+
+  // Export groups to CSV
+  const exportGroupsData = () => {
+    if (isLoading) {
+      toast.error('Não há dados para exportar ou carregamento em andamento.');
+      return;
+    }
+    
+    setIsLoading(true);
+    
+    try {
+      // Fetch all groups from the database based on current filter and search
+      const fetchAllFilteredGroups = async () => {
+        let query = supabase.from('groups').select('*');
+        
+        // Apply active/inactive filter
+        if (filterActive === 'active') {
+          query = query.eq('active', true);
+        } else if (filterActive === 'inactive') {
+          query = query.eq('active', false);
+        }
+        
+        // Add sorting by university name - alphabetical order
+        query = query.order('university', { ascending: true });
+        
+        // Apply search filter if there's a search term
+        if (searchTerm) {
+          // Use normalized text for better search matching
+          const searchLower = normalizeText(searchTerm);
+          
+          // Enhanced search across multiple fields
+          query = query.or(
+            `university.ilike.%${searchLower}%,` +
+            `city.ilike.%${searchLower}%,` + 
+            `state.ilike.%${searchLower}%,` + 
+            `country.ilike.%${searchLower}%`
+          );
+        }
+        
+        const { data, error } = await query;
+        
+        if (error) throw error;
+        
+        // If we have a search term but found no results through standard search, try leader search
+        if (searchTerm && (!data || data.length === 0)) {
+          // Search by leader name
+          const { data: leadersData } = await supabase
+            .from('leaders')
+            .select('*')
+            .ilike('name', `%${normalizeText(searchTerm)}%`);
+          
+          if (leadersData && leadersData.length > 0) {
+            // Get leader IDs that match the search
+            const leaderIds = leadersData.map(leader => leader.id);
+            
+            // Fetch groups with these leader IDs
+            let leaderGroupsQuery = supabase
+              .from('groups')
+              .select('*')
+              .in('leader_id', leaderIds);
+            
+            // Apply active filter if needed
+            if (filterActive === 'active') {
+              leaderGroupsQuery = leaderGroupsQuery.eq('active', true);
+            } else if (filterActive === 'inactive') {
+              leaderGroupsQuery = leaderGroupsQuery.eq('active', false);
+            }
+            
+            const { data: leaderGroupsData } = await leaderGroupsQuery;
+            return leaderGroupsData || [];
+          }
+        }
+        
+        return data || [];
+      };
+      
+      // Fetch all leaders to map leader IDs to names
+      const fetchAllLeaders = async () => {
+        const { data } = await supabase.from('leaders').select('*');
+        return data || [];
+      };
+      
+      // Execute both queries in parallel
+      Promise.all([fetchAllFilteredGroups(), fetchAllLeaders()])
+        .then(([allGroups, allLeaders]) => {
+          // Define CSV headers
+          const headers = ['ID', 'University', 'City', 'State', 'Country', 'Instagram', 'Status', 'Type', 'Leader', 'Meeting Times'];
+          
+          // Function to properly escape CSV fields for special characters and commas
+          const escapeCSVField = (field: string) => {
+            if (field === null || field === undefined) return '';
+            const stringField = String(field);
+            // If the field contains commas, quotes, or newlines, wrap it in quotes and escape any quotes
+            if (stringField.includes(',') || stringField.includes('"') || stringField.includes('\n')) {
+              return `"${stringField.replace(/"/g, '""')}"`;
+            }
+            return stringField;
+          };
+          
+          // Create the CSV content
+          const csvContent = [
+            headers.map(escapeCSVField).join(','),
+            ...allGroups.map(group => {
+              // Find leader name if there's a leader assigned
+              const leaderName = group.leader_id 
+                ? allLeaders.find(l => l.id === group.leader_id)?.name || 'Unknown Leader'
+                : 'No Leader';
+                
+              // Format meeting times
+              const meetingTimesFormatted = group.meetingTimes
+                .map((mt: MeetingTime) => `${mt.dayofweek} ${mt.time} ${mt.local || ''}`.trim())
+                .join(' | ');
+                
+              return [
+                escapeCSVField(group.id),
+                escapeCSVField(group.university),
+                escapeCSVField(group.city),
+                escapeCSVField(group.state),
+                escapeCSVField(group.country),
+                escapeCSVField(group.instagram || ''),
+                escapeCSVField(group.active ? 'Ativo' : 'Inativo'),
+                escapeCSVField(group.tipo || ''),
+                escapeCSVField(leaderName),
+                escapeCSVField(meetingTimesFormatted)
+              ].join(',');
+            })
+          ].join('\n');
+          
+          // Add UTF-8 BOM (Byte Order Mark) to help Excel recognize the encoding
+          // UTF-8 BOM is the byte sequence 0xEF,0xBB,0xBF
+          const BOM = "\uFEFF";
+          const csvContentWithBOM = BOM + csvContent;
+          
+          // Create a blob with explicit UTF-8 encoding
+          const blob = new Blob([csvContentWithBOM], { type: 'text/csv;charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.setAttribute('download', `grupos-${new Date().toISOString().split('T')[0]}.csv`);
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          
+          toast.success(`Dados exportados com sucesso! ${allGroups.length} grupos exportados.`);
+          setIsLoading(false);
+        })
+        .catch(error => {
+          console.error('Error exporting groups data:', error);
+          toast.error('Erro ao exportar dados. Por favor, tente novamente.');
+          setIsLoading(false);
+        });
+    } catch (error) {
+      console.error('Error exporting groups data:', error);
+      toast.error('Erro ao exportar dados. Por favor, tente novamente.');
+      setIsLoading(false);
+    }
+  };
 
   // Add this new function to fetch total counts
   const fetchTotalCounts = async () => {
@@ -1329,6 +1486,18 @@ export default function GroupsPage() {
                 inactiveCount={inactiveCount}
                 isLoading={isLoading}
               />
+              
+              {/* Export Button */}
+              <div className="flex justify-end mb-4">
+                <Button
+                  onClick={exportGroupsData}
+                  className="bg-primary hover:bg-primary/90 text-white"
+                  disabled={groups.length === 0 || isLoading}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Exportar CSV
+                </Button>
+              </div>
               
               <GroupList 
                 groups={paginatedGroups}

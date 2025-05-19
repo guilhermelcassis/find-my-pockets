@@ -1695,22 +1695,6 @@ export default function Home() {
                     </svg>
                     Mostrar todos os Pockets
                   </button>
-                  
-                  {['Brasil', 'São Paulo', 'Rio de Janeiro', 'USP'].map((suggestion) => (
-                    <button
-                      key={suggestion}
-                      type="button"
-                      onClick={(e: React.MouseEvent) => {
-                        setSearchTerm(suggestion);
-                        // Explicitly set searchType to null and pass null as directType
-                        setSearchType(null);
-                        performSearch(suggestion, e as unknown as React.FormEvent, true, null);
-                      }}
-                      className="px-4 py-2 bg-white/10 backdrop-blur-sm text-white rounded-full text-sm hover:bg-white/20 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-white/30 border border-white/10 shadow-md"
-                    >
-                      {suggestion}
-                    </button>
-                  ))}
                 </div>
               </form>
             ) : (
@@ -1728,15 +1712,6 @@ export default function Home() {
                     </svg>
                     Mostrar todos os Pockets
                   </div>
-                  
-                  {['Brasil', 'São Paulo', 'Rio de Janeiro', 'USP'].map((suggestion) => (
-                    <div
-                      key={suggestion}
-                      className="px-4 py-2 bg-white/10 backdrop-blur-sm text-white rounded-full text-sm border border-white/10 shadow-sm"
-                    >
-                      {suggestion}
-                    </div>
-                  ))}
                 </div>
               </div>
             )}

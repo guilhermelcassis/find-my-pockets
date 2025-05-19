@@ -58,6 +58,7 @@ import { DateRange } from 'react-day-picker';
 import { subDays } from 'date-fns';
 import Chart from 'react-apexcharts';
 import { cn } from '@/lib/utils';
+import { toast } from 'react-hot-toast';
 
 // Define chart colors
 const COLORS = ['#FF6242', '#611f69', '#36b37e', '#1E90FF', '#ff9f40', '#008080'];
@@ -344,6 +345,40 @@ const predictNextWeekActivity = (data: AnalyticsEvent[]): number => {
   
   // Cap the prediction to a reasonable range
   return Math.max(-50, Math.min(100, predictedChange));
+};
+
+// Add this function near the other analytics helper functions
+const getZeroResultSearches = (data: AnalyticsEvent[]): { query: string; searchType: string; count: number }[] => {
+  if (!data || data.length === 0) return [];
+  
+  // Filter for search events with zero results
+  const zeroResultSearches = data.filter(event => 
+    event.event_type === 'search' && 
+    event.event_data?.result_count === 0
+  );
+  
+  // Group by search term to count duplicates
+  const searchMap: Record<string, { query: string; searchType: string; count: number }> = {};
+  
+  zeroResultSearches.forEach(event => {
+    const query = event.event_data?.query || '';
+    const searchType = event.event_data?.search_type || 'unknown';
+    
+    const key = `${query.toLowerCase()}-${searchType}`;
+    
+    if (!searchMap[key]) {
+      searchMap[key] = {
+        query,
+        searchType,
+        count: 0
+      };
+    }
+    
+    searchMap[key].count++;
+  });
+  
+  // Convert to array and sort by count (most frequent first)
+  return Object.values(searchMap).sort((a, b) => b.count - a.count);
 };
 
 // Implement the generateActionableInsights function
@@ -1412,6 +1447,53 @@ export default function AnalyticsDashboard() {
     );
   };
   
+  // Add this export function with the other export functions
+  const exportZeroResultSearches = () => {
+    const zeroResultData = getZeroResultSearches(analyticsData);
+    
+    if (zeroResultData.length === 0) {
+      toast.error('No zero result searches to export');
+      return;
+    }
+    
+    // Create CSV content
+    const headers = ['Search Query', 'Search Type', 'Count'];
+    
+    // Function to properly escape CSV fields for special characters and commas
+    const escapeCSVField = (field: string) => {
+      if (field === null || field === undefined) return '';
+      const stringField = String(field);
+      // If the field contains commas, quotes, or newlines, wrap it in quotes and escape any quotes
+      if (stringField.includes(',') || stringField.includes('"') || stringField.includes('\n')) {
+        return `"${stringField.replace(/"/g, '""')}"`;
+      }
+      return stringField;
+    };
+    
+    // Create the CSV content with BOM for UTF-8 encoding
+    const BOM = "\uFEFF";
+    const csvContent = BOM + [
+      headers.map(escapeCSVField).join(','),
+      ...zeroResultData.map(item => [
+        escapeCSVField(item.query),
+        escapeCSVField(item.searchType),
+        item.count
+      ].join(','))
+    ].join('\n');
+    
+    // Create a blob and download the file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `zero-result-searches-${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    toast.success(`${zeroResultData.length} zero result searches exported successfully`);
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex justify-between items-center mb-8">
@@ -1986,6 +2068,67 @@ export default function AnalyticsDashboard() {
                 </CardContent>
               </Card>
             </div>
+
+            <Card className="mt-6">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base font-medium">Zero Result Searches</CardTitle>
+                <CardDescription>
+                  These search terms returned no results, indicating potential content gaps
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-6">
+                    <div className="animate-spin h-6 w-6 border-4 border-primary border-t-transparent rounded-full"></div>
+                  </div>
+                ) : (
+                  <>
+                    {getZeroResultSearches(analyticsData).length === 0 ? (
+                      <div className="text-sm text-muted-foreground py-4 text-center">
+                        No zero-result searches found.
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+                        {getZeroResultSearches(analyticsData).map((item, index) => (
+                          <div 
+                            key={index} 
+                            className="flex items-center justify-between p-2 rounded-md bg-amber-50 border border-amber-100"
+                          >
+                            <div className="flex items-center">
+                              <span className="flex-shrink-0 w-2 h-2 bg-amber-500 rounded-full mr-2"></span>
+                              <div>
+                                <p className="font-medium text-sm">{item.query}</p>
+                                <p className="text-xs text-gray-500">
+                                  Type: {item.searchType === 'all' ? 'General Search' : item.searchType}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center">
+                              <div className="text-xs py-1 px-2 bg-amber-100 rounded-full">
+                                {item.count} {item.count === 1 ? 'search' : 'searches'}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {getZeroResultSearches(analyticsData).length > 0 && (
+                      <div className="mt-4 flex justify-end">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={exportZeroResultSearches}
+                          className="text-xs flex items-center gap-1 text-amber-700 bg-amber-50 border-amber-200 hover:bg-amber-100"
+                        >
+                          <Download className="h-3 w-3" />
+                          Export Zero Result Searches
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
         
